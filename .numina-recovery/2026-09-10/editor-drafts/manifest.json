@@ -1,0 +1,16 @@
+{
+  "note": "Preserved Fuse editor snapshots. Some are older than the current branch; compare before restoring. Original branch contents were not overwritten.",
+  "drafts": [
+    {
+      "workspace_id": "bfa7a12b-2930-4946-94c0-ae86039614bc",
+      "original_branch": "refs/heads/numina/add-depth-content-to-main",
+      "original_blueprint_file": null,
+      "blueprint_name": "add-depth-content-to-main",
+      "project_subdir": "",
+      "saved_at": "2026-04-28 20:15:54.234719+00:00",
+      "revision": 1,
+      "audit_status": "file_absent",
+      "recovery_file": ".numina-recovery/2026-09-10/editor-drafts/bfa7a12b-2930-4946-94c0-ae86039614bc.tex"
+    }
+  ]
+}

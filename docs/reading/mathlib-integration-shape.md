@@ -1,6 +1,7 @@
 # Mathlib Integration Shape: Short and Long Term
 
-> Snapshot date: 2026-08-22. Toolchain `v4.33.0`, Mathlib `v4.33.0`.
+> Status: historical design guidance from the 2026-08-22 snapshot (toolchain `v4.33.0`, Mathlib
+> `v4.33.0`); the probability moves it proposes landed with the measure layer.
 >
 > Scoping companion to `denotational-probability-semantics.md`, which lands with the
 > measure-semantics work. That document settles *what the semantic objects are*; this one asks what VCVio's probability
@@ -96,7 +97,7 @@ Additive, no simp-normal-form changes, safe to land during the current cycle.
 1. **Make `expectedValue` an `∫⁻`.** With 69 uses over three files it does not warrant a bridge —
    but the obvious form of the move is a trap worth recording. `expectedValue` is generic over
    `{m} [Monad m] [MonadLiftT m SPMF]`, whereas `FreeM.denote` needs
-   `[∀ a, MeasurableSpace (P.B a)] [P.IsMeasureSpec]`. Redefining it as `∫⁻ x, g x ∂(denote mx)`
+   `[∀ a, MeasurableSpace (P.B a)] [P.AnswerMeasure]`. Redefining it as `∫⁻ x, g x ∂(denote mx)`
    would therefore **narrow it from any SPMF-lifting monad to free monads over a measure spec** —
    a regression, not a free adoption.
 

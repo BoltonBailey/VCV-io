@@ -12,7 +12,7 @@ public import Mathlib.InformationTheory.KullbackLeibler.DataProcessing
 /-!
 # Kullback-Leibler divergence between denoted programs
 
-The measure denotation of `VCVio.EvalDist.PFunctorMeasure` puts VCVio programs inside Mathlib's
+The measure denotation of `VCVio.EvalDist.PFunctorMeasure.Core` puts VCVio programs inside Mathlib's
 probability library, and this module spends that access on the Kullback-Leibler divergence.
 
 Nothing here is a port. `Measure.bind` *is* composition of a measure with a kernel — Mathlib
@@ -46,7 +46,7 @@ universe u uA
 
 namespace PFunctor.FreeM
 
-variable {P : PFunctor.{uA, u}} [∀ a, MeasurableSpace (P.B a)] [P.IsMeasureSpec] {α β : Type u}
+variable {P : PFunctor.{uA, u}} [∀ a, MeasurableSpace (P.B a)] [P.AnswerMeasure] {α β : Type u}
   [MeasurableSpace α] [DiscreteMeasurableSpace α] [MeasurableSpace β]
 
 /-! ### A continuation as a Markov kernel -/

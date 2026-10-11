@@ -12,7 +12,7 @@
   `Std.Do` view. It is not the main engine for quantitative or relational VCGen.
 
 For continuous or otherwise non-discrete denotations, import
-`VCVio.ProgramLogic.Relational.Measure`. Its `MeasureProgramLogic.RelWP` uses an almost-everywhere
+`VCVio.ProgramLogic.Relational.Measure`. Its `ExpectationWP.RelWP` uses an almost-everywhere
 postcondition under a Mathlib `Measure.Coupling`, and `eRelWP` integrates quantitative
 post-expectations with `lintegral`. The `OracleComp` relational logic (`RelTriple`, `CouplingPost`,
 `eRelWP`) specializes these to the output measures observed in the discrete structure on each
@@ -33,8 +33,8 @@ rules for queries need uniform response measures.
 
 For `wp oa f ≤ wp oa g`, `gcongr with x hx` exposes `hx : x ∈ support oa` and the
 pointwise obligation `f x ≤ g x`. The unrestricted `wp_mono` theorem remains available as a
-lower-priority fallback. On raw `Std.Internal.Do.wp` expressions, normalize with
-`simp only [OracleComp.Quantitative.wp_eq_mAlgOrdered_wp]` before `gcongr`.
+lower-priority fallback. On raw `Std.Internal.Do.WP.wp` expressions, normalize with
+`simp only [OracleComp.Lower.wp_eq_mAlgOrdered_wp]` before `gcongr`.
 `wp_eq_lintegral` integrates a measurable assertion in the chosen result space;
 `wp_eq_lintegral_map` observes an arbitrary assertion without requiring a space on hidden results.
 
@@ -151,7 +151,7 @@ classes of probability goals:
    - Swaps use `OracleComp.prEvent_bind_bind_swap` / `OracleComp.evalDist_bind_bind_swap`
      (countable responses) or their `_of_uniform` variants; congruence uses
      `OracleComp.prEvent_bind_congr_of_support` / `OracleComp.evalDist_bind_apply_congr_of_support`,
-     leaving the continuations on the structural support of the shared prefix
+     leaving the continuations at the possible outputs of the shared prefix
 
 4. **Other general `Pr{...}[...]` goals** → rewrite to raw `wp` form and keep stepping structurally
    when a `wp` rule applies. On an already-lowered raw-`wp` goal, `vcstep?` / `vcgen?`
@@ -719,13 +719,14 @@ stage degrade gracefully.
 Lean v4.34 provides lattice-generic `Std.Internal.Do.WPMonad`, `Triple`, transformer
 instances, and `vcgen`. The unary carriers in `Unary/WP/` consume these directly:
 
-- `open scoped OracleComp.Quantitative` selects expectation in `ℝ≥0∞` for `OracleComp spec`
-  under `[OracleSpec.IsMeasureSpec spec]`.
-- `open scoped MeasureProgramLogic.Quantitative` selects measure-backed expectation
+- `open scoped OracleComp.Lower` selects expectation in `ℝ≥0∞` for `OracleComp spec`
+  under `[OracleSpec.AnswerMeasure spec]`.
+- `open scoped ExpectationWP.Lower` selects expectation in `ℝ≥0∞`
   for any lawful monad with `LawfulEvalDistSemantics`. It also selects this carrier over
   core `Prop` interpretations for monads such as `Option`. Its module is
   `VCVio.ProgramLogic.Unary.WP.Measure`.
-- `open scoped OracleComp.Qualitative` selects universal structural reachability.
+- `open scoped OracleComp.Necessary` selects the necessary reading: a postcondition at every
+  possible output.
 - `open scoped OracleComp.Probabilistic` selects the restricted algebra on `Set.Iic 1`.
 
 Use `open scoped Std.Internal.Do` for core triple notation. Carrier choice is local;
@@ -741,7 +742,7 @@ VCVio's probability/coupling tactics continue to consume `@[vcspec]` and `@[wpSt
 Core `vcgen` consumes the core `@[spec]` catalogue. Generic transformer WP comes from
 core and PolyFun's WriterT interpretation; VCVio retains its probability rules and
 existing transformer equality lemmas. The scoped `WriterT.MonoidWP` interpretation
-uses multiplication; append-based logs use `WriterT.toWPMonad` with explicit operations.
+uses multiplication; append-based logs use `MAlgOrdered.toWPMonad` with explicit operations.
 
 The `Std.Do` handler bridge is a separate consumer of core's older SPred API.
 Its migration to lattice-generic triples is a focused follow-up; it does not require Loom.

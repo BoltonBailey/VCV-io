@@ -7,7 +7,7 @@ Authors: Devon Tuma
 module
 
 public import VCVio.OracleComp.EvalDist.Measure
-public import VCVio.OracleComp.EvalDist.MeasureSpec
+public import VCVio.OracleComp.EvalDist.AnswerMeasure
 public import VCVio.OracleComp.OracleComp
 public import VCVio.EvalDist.ProbabilityNotation
 public import VCVio.EvalDist.BitVec.Measure
@@ -29,7 +29,7 @@ public section
 
 open MeasureTheory ProbabilityTheory
 
-namespace VCVioTest.UniformMeasureSpec
+namespace VCVioTest.UniformAnswerMeasure
 
 /-! ### One measure semantics per specification
 
@@ -39,20 +39,20 @@ spellings of one instance. -/
 
 example : (inferInstance : EvalDistSemantics ProbComp) =
     @OracleComp.instEvalDistSemantics ℕ unifSpec
-      OracleSpec.IsUniformMeasureSpec.unifSpec.toIsMeasureSpec := by
+      OracleSpec.UniformAnswerMeasure.unifSpec.toAnswerMeasure := by
   with_reducible_and_instances rfl
 
-example : (inferInstance : OracleSpec.IsMeasureSpec (unifSpec + coinSpec)) =
-    OracleSpec.IsMeasureSpec.add (spec := unifSpec) coinSpec := by
+example : (inferInstance : OracleSpec.AnswerMeasure (unifSpec + coinSpec)) =
+    OracleSpec.AnswerMeasure.add (spec := unifSpec) coinSpec := by
   with_reducible_and_instances rfl
 
-example : (inferInstance : OracleSpec.IsMeasureSpec (unifSpec + coinSpec)) =
-    (OracleSpec.IsUniformMeasureSpec.add (spec := unifSpec) coinSpec).toIsMeasureSpec := by
+example : (inferInstance : OracleSpec.AnswerMeasure (unifSpec + coinSpec)) =
+    (OracleSpec.UniformAnswerMeasure.add (spec := unifSpec) coinSpec).toAnswerMeasure := by
   with_reducible_and_instances rfl
 
-example : OracleSpec.IsMeasureSpec.toMeasure (spec := coinSpec) () =
+example : OracleSpec.AnswerMeasure.toMeasure (spec := coinSpec) () =
     (uniformOn Set.univ : Measure Bool) :=
-  OracleSpec.IsUniformMeasureSpec.toMeasure_eq_uniform ()
+  OracleSpec.UniformAnswerMeasure.toMeasure_eq_uniform ()
 
 example : 𝒟[(pure true : OracleComp coinSpec Bool)] = Measure.dirac true := by
   simp
@@ -127,4 +127,4 @@ example (g : Bool → ProbComp Bool) (i : Bool) :
     (𝒟[Fintype.mPi g]).map (Function.eval i) = 𝒟[g i] :=
   evalDist_map_eval_mPi g (fun j => OracleComp.evalDist_apply_univ_eq_one (g j)) i
 
-end VCVioTest.UniformMeasureSpec
+end VCVioTest.UniformAnswerMeasure

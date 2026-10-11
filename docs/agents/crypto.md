@@ -210,7 +210,7 @@ adapter.
 `VCVio/CryptoFoundations/SeededFork.lean` and `ReplayFork.lean` prove the
 seeded and context-fork success bounds as `Pr{…}` bounds on the
 `Option.isSome` event under uniform answer measures
-(`OracleSpec.IsUniformMeasureSpec`). `FiatShamir/Sigma/Fork.lean` specializes the
+(`OracleSpec.UniformAnswerMeasure`). `FiatShamir/Sigma/Fork.lean` specializes the
 replay bound to the managed random-oracle trace, with the measure instances of
 `wrappedSpec` taken as hypotheses so each caller fixes its own discrete answer
 spaces.
@@ -420,12 +420,9 @@ structure CostModel (spec : OracleSpec ι) (ω : Type) [AddCommMonoid ω] where
 | `expectedCost oa cm val` | `E[val(cost)]` via `wp` |
 | `WorstCaseCostBound oa cm bound` | All paths have cost `≤ bound` |
 | `ExpectedCostBound oa cm val bound` | Expected valued cost `≤ bound` |
-| `WorstCasePolyTime family cm val` | Worst-case poly bound over security parameter |
-| `ExpectedPolyTime family cm val` | Expected poly bound over security parameter |
 
 Key results: `fst_map_costDist` (instrumentation is transparent),
-`prEvent_costDist_gt_le_expectedCost_div` (Markov's inequality),
-`WorstCasePolyTime.toExpectedPolyTime`.
+`prEvent_costDist_gt_le_expectedCost_div` (Markov's inequality).
 
 ## Common Gotchas
 

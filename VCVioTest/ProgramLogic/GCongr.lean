@@ -12,13 +12,13 @@ public import VCVio.ProgramLogic.Unary.HoareTriple
 # `gcongr` through `wp`
 
 Canaries for the `@[gcongr]` tag on `wp_mono`: `gcongr` descends through `wp` into the
-postcondition and structural support, also under a finite sum. Measurable assertions use
+postcondition and possible outputs, also under a finite sum. Measurable assertions use
 `wp_eq_lintegral` in the chosen output space.
 -/
 
 public section
 
-open scoped OracleComp.Quantitative Std.Internal.Do
+open scoped OracleComp.Lower Std.Internal.Do
 
 open ENNReal OracleSpec OracleComp MeasureTheory
 open OracleComp.ProgramLogic
@@ -34,7 +34,7 @@ namespace VCVioTest.ProgramLogicGCongr
 universe u
 
 variable {ι : Type u} {spec : OracleSpec ι} {α : Type}
-  [OracleSpec.IsMeasureSpec spec]
+  [OracleSpec.AnswerMeasure spec]
 
 example (P Q : Prop) (h : P → Q) : propInd P ≤ propInd Q := by apply_rw [h]
 
@@ -70,11 +70,11 @@ example (oa : OracleComp spec α) (f g : Fin 3 → α → ℝ≥0∞)
   gcongr with i _ x hx
   exact h i x hx
 
-/-- Public normalization exposes structural support to core WP congruence. -/
+/-- Public normalization exposes possible outputs to core WP congruence. -/
 example (oa : OracleComp spec α) (f g : α → ℝ≥0∞)
     (h : ∀ x ∈ support oa, f x ≤ g x) :
     Std.Internal.Do.wp oa f Lean.Order.bot ≤ Std.Internal.Do.wp oa g Lean.Order.bot := by
-  simp only [OracleComp.Quantitative.wp_eq_mAlgOrdered_wp]
+  simp only [OracleComp.Lower.wp_eq_mAlgOrdered_wp]
   gcongr with x hx
   exact h x hx
 

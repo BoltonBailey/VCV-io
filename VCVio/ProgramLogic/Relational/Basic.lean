@@ -36,7 +36,7 @@ open scoped OracleSpec.PrimitiveQuery
 
 namespace OracleComp.ProgramLogic.Relational
 
-open OracleSpec MeasureProgramLogic
+open OracleSpec ExpectationWP
 
 /-- Relational postconditions over two output spaces. -/
 abbrev RelPost (α : Sort w) (β : Sort x) := α → β → Prop
@@ -62,7 +62,7 @@ variable {α β γ δ : Type}
 
 section measureSpec
 
-variable [IsMeasureSpec spec₁] [IsMeasureSpec spec₂]
+variable [AnswerMeasure spec₁] [AnswerMeasure spec₂]
 
 /-- Coupling-based semantic relational WP for `OracleComp`: some coupling of the two output
 measures, each observed in the discrete structure on its output type, satisfies `R` almost
@@ -70,7 +70,7 @@ everywhere. -/
 def CouplingPost (oa : OracleComp spec₁ α) (ob : OracleComp spec₂ β) (R : RelPost α β) : Prop :=
   letI : MeasurableSpace α := ⊤
   letI : MeasurableSpace β := ⊤
-  MeasureProgramLogic.RelWP oa ob R
+  ExpectationWP.RelWP oa ob R
 
 /-- Implication of postconditions preserves a coupling. -/
 theorem CouplingPost.mono {oa : OracleComp spec₁ α} {ob : OracleComp spec₂ β}
@@ -86,7 +86,7 @@ theorem couplingPost_pure_pure_iff (a : α) (b : β) (R : RelPost α β) :
     CouplingPost (pure a : OracleComp spec₁ α) (pure b : OracleComp spec₂ β) R ↔ R a b := by
   simp [CouplingPost]
 
-/-- The output measure of a computation concentrates on its structural support. -/
+/-- The output measure of a computation concentrates on its possible outputs. -/
 theorem ae_mem_support (oa : OracleComp spec₁ α) :
     letI : MeasurableSpace α := ⊤; ∀ᵐ a ∂𝒟[oa], a ∈ support oa := by
   let : MeasurableSpace α := ⊤
@@ -232,7 +232,7 @@ lemma relTriple_symm {oa : OracleComp spec₁ α} {ob : OracleComp spec₂ β} {
 /-- Transport a relational triple across equality in distribution of the left computation. -/
 lemma relTriple_of_evalDistEq_left
     {ι₃ : Type w} {spec₃ : OracleSpec.{w, 0} ι₃}
-    [IsMeasureSpec spec₃]
+    [AnswerMeasure spec₃]
     [∀ t, Finite (spec₃.Range t)]
     {oa : OracleComp spec₁ α} {oa' : OracleComp spec₂ α}
     {ob : OracleComp spec₃ β} {R : RelPost α β}
@@ -248,7 +248,7 @@ lemma relTriple_of_evalDistEq_left
 /-- Transport a relational triple across equality in distribution of the right computation. -/
 lemma relTriple_of_evalDistEq_right
     {ι₃ : Type w} {spec₃ : OracleSpec.{w, 0} ι₃}
-    [IsMeasureSpec spec₃]
+    [AnswerMeasure spec₃]
     [∀ t, Finite (spec₃.Range t)]
     {oa : OracleComp spec₁ α} {ob : OracleComp spec₂ β}
     {ob' : OracleComp spec₃ β} {R : RelPost α β}
@@ -339,7 +339,7 @@ lemma prEvent_le_of_relTriple {oa : OracleComp spec₁ α} {ob : OracleComp spec
 /-- Transitivity through an intermediate computation related to the left side by `EqRel`. -/
 lemma relTriple_trans_eqRel_left
     {ι₃ : Type w} {spec₃ : OracleSpec.{w, 0} ι₃}
-    [IsMeasureSpec spec₃]
+    [AnswerMeasure spec₃]
     [∀ t, Finite (spec₃.Range t)]
     {oa : OracleComp spec₁ α} {mid : OracleComp spec₂ α}
     {ob : OracleComp spec₃ β} {R : RelPost α β}
@@ -350,7 +350,7 @@ lemma relTriple_trans_eqRel_left
 /-- Transitivity through an intermediate computation related to the right side by `EqRel`. -/
 lemma relTriple_trans_eqRel_right
     {ι₃ : Type w} {spec₃ : OracleSpec.{w, 0} ι₃}
-    [IsMeasureSpec spec₃]
+    [AnswerMeasure spec₃]
     [∀ t, Finite (spec₃.Range t)]
     {oa : OracleComp spec₁ α} {mid : OracleComp spec₂ β}
     {ob : OracleComp spec₃ β} {R : RelPost α β}
@@ -361,7 +361,7 @@ lemma relTriple_trans_eqRel_right
 /-- Transitivity of equality-relation relational triples through an intermediate computation. -/
 lemma relTriple_trans_eqRel
     {ι₃ : Type w} {spec₃ : OracleSpec.{w, 0} ι₃}
-    [IsMeasureSpec spec₃]
+    [AnswerMeasure spec₃]
     [∀ t, Finite (spec₃.Range t)]
     {oa : OracleComp spec₁ α} {mid : OracleComp spec₂ α} {ob : OracleComp spec₃ α}
     (hleft : RelTriple oa mid (EqRel α)) (hright : RelTriple mid ob (EqRel α)) :
@@ -527,12 +527,12 @@ end measureSpec
 
 /-! ## Anchoring and bijection rules under uniform response measures -/
 
-section uniformMeasureSpec
+section uniformAnswerMeasure
 
-variable [IsUniformMeasureSpec spec₁] [IsUniformMeasureSpec spec₂]
+variable [UniformAnswerMeasure spec₁] [UniformAnswerMeasure spec₂]
 
 /-- A coupling with a Dirac first marginal forces the first coordinate, so an almost-sure
-relation holds between that value and every structurally reachable output of the second
+relation holds between that value and every possible output of the second
 computation, each of which has positive mass under uniform response measures. -/
 private theorem forall_mem_support_of_couplingPost_pure_left {a : α} {y : OracleComp spec₂ β}
     {post : RelPost α β} (h : CouplingPost (pure a : OracleComp spec₁ α) y post) :
@@ -580,7 +580,7 @@ variable [∀ t, Finite (spec₁.Range t)] [∀ t, Finite (spec₂.Range t)]
 
 When one of the two computations is `pure`, the relational coupling logic collapses to the
 unary support-based logic of the other side. Every reachable output has positive mass under
-uniform response measures, so an almost-sure relation holds on the whole structural support.
+uniform response measures, so an almost-sure relation holds at every possible output.
 
 Together with the unary `Prop` algebra in `VCVio/ProgramLogic/Unary/HoarePropTriple.lean`,
 this lets `wpExc` / `rwpExc`-style honest exception combinators (in
@@ -609,7 +609,7 @@ theorem isCoupling_query_graph (t : spec₁.Domain) {f : spec₁.Range t → spe
       (𝒟[(liftM (query t) : OracleComp spec₁ (spec₁.Range t))].map fun a ↦ (a, f a))
       𝒟[(liftM (query t) : OracleComp spec₁ (spec₁.Range t))]
       𝒟[(liftM (query t) : OracleComp spec₁ (spec₁.Range t))] := by
-  have := IsUniformMeasureSpec.nonempty_range (spec := spec₁) t
+  have := UniformAnswerMeasure.nonempty_range (spec := spec₁) t
   let : MeasurableSpace (spec₁.Range t) := ⊤
   have hq : 𝒟[(liftM (query t) : OracleComp spec₁ (spec₁.Range t))] = uniformOn Set.univ :=
     OracleComp.evalDist_liftM_query_uniform t
@@ -651,7 +651,7 @@ lemma relTriple_bind_query_bij (t : spec₁.Domain)
     (relTriple_post_mono (relTriple_query_bij t hf) fun _ _ h => h.symm)
     fun a b hb => by simpa [hb] using hfg a
 
-end uniformMeasureSpec
+end uniformAnswerMeasure
 
 section Sampling
 

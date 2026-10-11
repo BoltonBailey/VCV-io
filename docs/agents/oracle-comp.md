@@ -34,14 +34,14 @@ application lemmas.
 
 Required typeclass instances for probability reasoning:
 
-- `[OracleSpec.IsMeasureSpec spec]` selects the query measures;
-  `[OracleSpec.IsUniformMeasureSpec spec]` makes each of them uniform.
+- `[OracleSpec.AnswerMeasure spec]` selects the query measures;
+  `[OracleSpec.UniformAnswerMeasure spec]` makes each of them uniform.
 - Query answers carry the discrete σ-algebra, so answer types need no measurable-space instance,
   and discrete answer spaces discharge measurability of arbitrary free-program continuations.
 - `𝒟[…]` needs a `MeasurableSpace` on the result type; `Pr{…}[…]` observes a `Prop` and needs
   none on intermediate results.
 
-Structural support, handler composition, instrumentation, and query bounds need no probability
+Support, handler composition, instrumentation, and query bounds need no probability
 interpretation. Finite uniform queries are a sampling specialization, not a requirement of the
 measure API.
 
@@ -83,8 +83,7 @@ depend on the oracle interface. It is the `Set` view of PolyFun's
 `FreeM.reachableUnder`, obtained by folding the angelic per-operation predicate
 transformer over the free tree. The pure, query, bind, and monotonicity laws are
 available as `reachableWhen_pure`, `reachableWhen_query`,
-`reachableWhen_bind`, and `reachableWhen_mono`. Use `reachableWhen` rather than the deprecated
-`supportWhen`.
+`reachableWhen_bind`, and `reachableWhen_mono`.
 
 `support oa` admits every typed response; `reachableWhen_univ_eq_support`
 connects it to the operation-indexed construction. The generic `support` name
@@ -144,7 +143,7 @@ class SubSpec (spec : OracleSpec.{u, w} ι) (superSpec : OracleSpec.{v, w} τ)
 
 By the Yoneda lemma for polynomial functors this lens data is in bijection with natural transformations `OracleQuery spec ⟹ OracleQuery superSpec`. The `MonadLift` parent records that natural transformation; the `liftM_eq_lift` field is the propositional coherence axiom forcing it to agree with the lens. Concrete `SubSpec` instances spell `monadLift` out *by hand* (rather than letting it default from the lens data), so that the lifted query reduces fully under `isDefEq` — this lets pattern-matching equations about lifted queries, such as `liftComp_query`, apply through their registered automation or explicitly by name.
 
-`SubSpec.toLens` exposes the underlying lens; `SubSpec.trans` is composition of these lenses; `MonadLiftT.refl` covers the identity.
+`SubSpec.toLens` exposes the underlying lens; `SubSpec.trans` is composition of these lenses; the reflexive `MonadLiftT` instance covers the identity.
 
 #### Why `SubSpec` extends `MonadLift` rather than `PFunctor.Lens`
 
@@ -181,13 +180,13 @@ When lifting `OracleComp spec α` to `OracleComp superSpec α` (e.g., a sub-comp
 ### Measure lemmas (`VCVio/OracleComp/Coercions/SubSpec/Measure.lean`)
 
 The uniform lemmas additionally require `[spec ˡ⊂ₒ superSpec]` and
-`[OracleSpec.IsUniformMeasureSpec _]` on both specs.
+`[OracleSpec.UniformAnswerMeasure _]` on both specs.
 
 | Lemma | Signature |
 |-------|-----------|
 | `evalDist_liftComp_uniform` | `𝒟[liftComp mx superSpec] = 𝒟[mx]` |
 | `evalDistEq_liftComp_uniform` | `liftComp mx superSpec =ᵈ mx` |
-| `evalDist_liftComp_of_evalDistEq` | `𝒟[liftComp mx superSpec] = 𝒟[mx]` for arbitrary `IsMeasureSpec`s, given that each lifted query is `=ᵈ` the original |
+| `evalDist_liftComp_of_evalDistEq` | `𝒟[liftComp mx superSpec] = 𝒟[mx]` for arbitrary `AnswerMeasure`s, given that each lifted query is `=ᵈ` the original |
 
 ## QueryImpl and simulateQ
 
@@ -317,11 +316,11 @@ For `OracleComp`, `support` is always available. It is PolyFun's structural
 with the fold into `SetM` that interprets each query by `Set.univ`.
 
 `evalDist` / `𝒟[…]` is the successful-output Mathlib measure. Under
-`[OracleSpec.IsMeasureSpec spec]` it is definitionally the direct recursive measure fold
+`[OracleSpec.AnswerMeasure spec]` it is definitionally the direct recursive measure fold
 `PFunctor.FreeM.denote`, which composes the per-query answer measures with `Measure.bind`;
 `PFunctor.FreeM.evalDist_eq_denote` records this (`𝒟[…]` stays the public head; the lemma is a
 transport, not a simp rule). A lifted query denotes its answer measure (`evalDist_liftM_query`,
-and `evalDist_liftM_query_uniform` for `uniformOn Set.univ` under `IsUniformMeasureSpec`), and
+and `evalDist_liftM_query_uniform` for `uniformOn Set.univ` under `UniformAnswerMeasure`), and
 `evalDist_apply_univ_eq_one` / `prEvent_true_eq_one` record that oracle computations are lossless.
 
 Events `Pr{…}[…]` are `prEvent`, the mass on `True`. `prEvent_eq_evalDist`,
@@ -339,7 +338,7 @@ def uniformSampleImpl [∀ i, SampleableType (spec.Range i)] :
 
 Preservation of the output measure through `uniformSampleImpl` is a **lemma**, not definitional:
 `uniformSampleImpl.evalDist_simulateQ : 𝒟[simulateQ uniformSampleImpl oa] = 𝒟[oa]` under
-`[OracleSpec.IsUniformMeasureSpec spec]`, with `uniformSampleImpl.evalDistEq_simulateQ` for `=ᵈ`
+`[OracleSpec.UniformAnswerMeasure spec]`, with `uniformSampleImpl.evalDistEq_simulateQ` for `=ᵈ`
 (`VCVio/OracleComp/Constructions/SampleableType/Measure.lean`). The structural companions
 `uniformSampleImpl.support_simulateQ` and `uniformSampleImpl.finSupport_simulateQ` live in
 `VCVio/OracleComp/Constructions/SampleableType/Basic.lean`. For an arbitrary handler,

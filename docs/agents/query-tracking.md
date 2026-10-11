@@ -19,7 +19,7 @@ The structural instrumentation owners are `Tracing.Core`, `CountingOracle.Core`,
 handler machinery; their structural laws need no probability specification. `VCVio.Foundations`
 imports these owners together with the measure semantics.
 
-Enforcement event laws use `Pr{...}[...]` and a chosen `IsMeasureSpec`, with discrete query-answer
+Enforcement event laws use `Pr{...}[...]` and a chosen `AnswerMeasure`, with discrete query-answer
 spaces to interpret arbitrary oracle continuations. They do not require uniform sampling or
 discrete result, budget, or state spaces.
 
@@ -292,9 +292,9 @@ Use an exact pathwise theorem when every run really has the same cost.
 
 Examples:
 
-- `FiatShamir.verify` uses exactly one query
-- `TTransform.encrypt` uses exactly one query
-- `Fischlin.verify` uses exactly `ρ` queries
+- the Fiat–Shamir verifier uses exactly one query
+- `TTransform` encryption uses exactly one query
+- the Fischlin verifier uses exactly `ρ` queries
 
 ### Prove `UsesCostAs`
 
@@ -315,7 +315,7 @@ Use a pathwise upper bound when branching or retrying changes the cost across ru
 Examples:
 
 - `TTransform.decrypt` uses at most one query
-- `FiatShamirWithAbort.sign` uses at most `maxAttempts` queries
+- the with-aborts signer uses at most `maxAttempts` queries
 - Fischlin signing uses at most `ρ * |Ω|` queries
 
 These are the right first theorems for search loops, aborting schemes, and stopping-time style

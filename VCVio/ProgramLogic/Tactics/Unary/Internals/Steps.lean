@@ -30,7 +30,7 @@ universe u v
 /-! ## `vcspec_simp` normalization set
 
 Centralized registration of the transformer-`wp` peel lemmas, `*.run`
-projections, monadic-algebra rewrites, and the `Quantitative.wp_eq_mAlgOrdered_wp`
+projections, monadic-algebra rewrites, and the `Lower.wp_eq_mAlgOrdered_wp`
 bridges that the unary tactic uses to expose spec-applicable goal shapes.
 The single simp set is consumed by `runVCSpecSimp`. New normalization rewrites
 should be tagged here (or at definition) rather than inserted into a
@@ -52,36 +52,36 @@ attribute [vcspec_simp]
   ExceptT.run_bind ExceptT.run_pure ExceptT.run_lift ExceptT.run_throw
   ExceptT.run_map
   -- VCVio expectation bridges and the underlying quantitative `MAlgOrdered.wp`
-  OracleComp.Quantitative.wp_eq_mAlgOrdered_wp
-  OracleComp.Quantitative.wp_eq_mAlgOrdered_wp_epost
+  OracleComp.Lower.wp_eq_mAlgOrdered_wp
+  OracleComp.Lower.wp_eq_mAlgOrdered_wp_epost
   MAlgOrdered.wp_bind MAlgOrdered.wp_pure MAlgOrdered.wp_map
-  -- VCVio per-transformer `Quantitative.wp_*` peeling lemmas
-  OracleComp.Quantitative.wp_StateT_bind
-  OracleComp.Quantitative.wp_StateT_bind'
-  OracleComp.Quantitative.wp_StateT_pure
-  OracleComp.Quantitative.wp_StateT_get
-  OracleComp.Quantitative.wp_StateT_set
-  OracleComp.Quantitative.wp_StateT_modifyGet
-  OracleComp.Quantitative.wp_StateT_monadLift
-  OracleComp.Quantitative.wp_OptionT_bind
-  OracleComp.Quantitative.wp_OptionT_pure
-  OracleComp.Quantitative.wp_OptionT_failure
-  OracleComp.Quantitative.wp_OptionT_monadLift
-  OracleComp.Quantitative.wp_OptionT_lift
-  OracleComp.Quantitative.wp_OptionT_map
-  OracleComp.Quantitative.wp_ExceptT_bind
-  OracleComp.Quantitative.wp_ExceptT_pure
-  OracleComp.Quantitative.wp_ExceptT_throw
-  OracleComp.Quantitative.wp_ExceptT_monadLift
-  OracleComp.Quantitative.wp_ReaderT_bind
-  OracleComp.Quantitative.wp_ReaderT_pure
-  OracleComp.Quantitative.wp_ReaderT_read
-  OracleComp.Quantitative.wp_ReaderT_monadLift
-  OracleComp.Quantitative.WriterT.wp_bind
-  OracleComp.Quantitative.WriterT.wp_pure
-  OracleComp.Quantitative.WriterT.wp_tell
-  OracleComp.Quantitative.WriterT.wp_monadLift
-  OracleComp.Quantitative.WriterT.wp_map
+  -- VCVio per-transformer `Lower.wp_*` peeling lemmas
+  OracleComp.Lower.wp_StateT_bind
+  OracleComp.Lower.wp_StateT_bind'
+  OracleComp.Lower.wp_StateT_pure
+  OracleComp.Lower.wp_StateT_get
+  OracleComp.Lower.wp_StateT_set
+  OracleComp.Lower.wp_StateT_modifyGet
+  OracleComp.Lower.wp_StateT_monadLift
+  OracleComp.Lower.wp_OptionT_bind
+  OracleComp.Lower.wp_OptionT_pure
+  OracleComp.Lower.wp_OptionT_failure
+  OracleComp.Lower.wp_OptionT_monadLift
+  OracleComp.Lower.wp_OptionT_lift
+  OracleComp.Lower.wp_OptionT_map
+  OracleComp.Lower.wp_ExceptT_bind
+  OracleComp.Lower.wp_ExceptT_pure
+  OracleComp.Lower.wp_ExceptT_throw
+  OracleComp.Lower.wp_ExceptT_monadLift
+  OracleComp.Lower.wp_ReaderT_bind
+  OracleComp.Lower.wp_ReaderT_pure
+  OracleComp.Lower.wp_ReaderT_read
+  OracleComp.Lower.wp_ReaderT_monadLift
+  OracleComp.Lower.WriterT.wp_bind
+  OracleComp.Lower.WriterT.wp_pure
+  OracleComp.Lower.WriterT.wp_tell
+  OracleComp.Lower.WriterT.wp_monadLift
+  OracleComp.Lower.WriterT.wp_map
   -- VCVio transformer-internal layer lemmas from `Unary.Internals.Rules`
   OracleComp.ProgramLogic.TacticInternals.Unary.wp_StateT_get_layer
   OracleComp.ProgramLogic.TacticInternals.Unary.wp_StateT_get_layer'
@@ -787,7 +787,7 @@ def runProbEqSwap : TacticM Bool := do
       | (rw [OracleComp.evalDist_bind_bind_swap_of_uniform]; done))))
 
 /-- Reduce an equality of composed event masses, or of composed output measures, to the
-continuations on the structural support of the shared prefix. The goal left behind quantifies
+continuations at the possible outputs of the shared prefix. The goal left behind quantifies
 over a reachable prefix output and its support hypothesis. -/
 private def runProbEqCongrCore : TacticM Bool := do
   tryEvalTacticSyntax (← `(tactic|

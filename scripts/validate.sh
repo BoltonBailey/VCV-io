@@ -32,6 +32,8 @@ Default fast checks (shared with per-PR CI):
     modules, once lake test has built them
   - lake lint -- --style-only on every library and test module
   - python3 ./scripts/check-agent-docs.py and extract-doc-fragments.py --check
+  - scripts/test-docnames.sh, then python3 ./scripts/check-doc-names.py --resolve
+    (the declaration names the guides cite, against the oleans the build produced)
 
 Optional checks:
   --lint    Batteries environment linters, one process per proof library as in CI
@@ -74,7 +76,6 @@ for lib in "${PROOF_LIBS[@]}"; do
 done
 python3 ./scripts/check-warning-log.py "$BUILD_LOG" "${warning_args[@]}" \
   --exclude-substring 'declaration uses `sorry`' \
-  --exclude-substring 'VCVio retiring probability API' \
   --label 'repository non-sorry warnings'
 
 echo ""
@@ -113,6 +114,8 @@ echo ""
 echo "# Checking the agent documentation"
 python3 ./scripts/check-agent-docs.py
 python3 ./scripts/extract-doc-fragments.py --check
+bash scripts/test-docnames.sh
+python3 ./scripts/check-doc-names.py --resolve
 
 if (( run_lint )); then
   echo ""
@@ -133,7 +136,6 @@ if (( run_test )); then
     --path-prefix VCVioTest/ --path-prefix VCVioTest.lean \
     --path-prefix LatticeCryptoTest/ --path-prefix LatticeCryptoTest.lean \
     --path-prefix HashSigTest/ \
-    --exclude-substring 'VCVio retiring probability API' \
     --label 'test-library warnings'
 
 

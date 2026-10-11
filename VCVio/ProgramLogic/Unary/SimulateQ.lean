@@ -37,9 +37,9 @@ namespace OracleComp.ProgramLogic
 variable {ι : Type*} {spec : OracleSpec ι}
 variable {α : Type}
 
-section MeasureSpec
+section answerMeasure
 
-variable [OracleSpec.IsMeasureSpec spec]
+variable [OracleSpec.AnswerMeasure spec]
 
 /-- If every oracle query in `impl` has the same evaluation distribution as the original query,
 then `wp` of the simulated computation equals `wp` of the original. -/
@@ -62,7 +62,7 @@ then `wp` of the simulated computation equals `wp` of the original. -/
 
 /-- A distribution-preserving signature inclusion preserves quantitative WP. -/
 theorem wp_liftComp_of_evalDistEq {ι' : Type*} {superSpec : OracleSpec ι'}
-    [OracleSpec.IsMeasureSpec superSpec]
+    [OracleSpec.AnswerMeasure superSpec]
     [h : spec ⊂ₒ superSpec]
     (hMeasure : ∀ t, (liftM (spec.query t) : OracleComp superSpec (spec.Range t)) =ᵈ
       (liftM (spec.query t) : OracleComp spec (spec.Range t)))
@@ -78,19 +78,19 @@ theorem wp_liftComp_of_evalDistEq {ι' : Type*} {superSpec : OracleSpec ι'}
     rw [wp_eq_lintegral _ _ Measurable.of_discrete, (hMeasure t).evalDist_eq,
       ← wp_eq_lintegral _ _ Measurable.of_discrete]
 
-end MeasureSpec
+end answerMeasure
 
 /-- Cartesian lifting between uniform specifications preserves quantitative WP. -/
-@[game_rule] theorem wp_liftComp [OracleSpec.IsUniformMeasureSpec spec]
+@[game_rule] theorem wp_liftComp [OracleSpec.UniformAnswerMeasure spec]
     {ι' : Type*} {superSpec : OracleSpec ι'}
-    [OracleSpec.IsUniformMeasureSpec superSpec] [spec ⊂ₒ superSpec] [spec ˡ⊂ₒ superSpec]
+    [OracleSpec.UniformAnswerMeasure superSpec] [spec ⊂ₒ superSpec] [spec ˡ⊂ₒ superSpec]
     (mx : OracleComp spec α) (post : α → ℝ≥0∞) :
     wp (liftComp mx superSpec) post = wp mx post :=
   wp_liftComp_of_evalDistEq (fun t ↦ evalDistEq_liftM_query_uniform t) mx post
 
-section MeasureSpec
+section answerMeasure
 
-variable [OracleSpec.IsMeasureSpec spec]
+variable [OracleSpec.AnswerMeasure spec]
 
 /-- A stateful implementation preserving each configured answer measure preserves WP
 after its state is discarded. The hidden state needs no measurable-space instance. -/
@@ -117,6 +117,6 @@ after its state is discarded. The hidden state needs no measurable-space instanc
           ← wp_eq_lintegral _ _ Measurable.of_discrete]
 
 
-end MeasureSpec
+end answerMeasure
 
 end OracleComp.ProgramLogic

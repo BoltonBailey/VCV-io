@@ -33,7 +33,7 @@ monad. Positions are laid out on a caller-supplied skeleton `s` via a position-t
 leaf's branch), carried as a plain `List` of hashes.
 -/
 
-@[expose] public section
+public section
 
 open OracleComp OracleSpec BinaryTree
 
@@ -43,6 +43,7 @@ variable {α : Type}
 
 /-- Build the leaf data of a Merkle tree of skeleton `s` from a function assigning a value to each
 leaf position. -/
+@[expose]
 def leafDataOfFn : (s : Skeleton) → (SkeletonLeafIndex s → α) → LeafData α s
   | Skeleton.leaf, f => LeafData.leaf (f SkeletonLeafIndex.ofLeaf)
   | Skeleton.internal _ _, f =>
@@ -57,6 +58,7 @@ two-to-one compression function. Committing builds the full tree and exposes its
 for a position is its authentication path (`generateProof`), carried as a `List`; verification
 recomputes the putative root from the leaf value and path (`getPutativeRootWithHash`) and compares
 it to the commitment. The operations are pure, so the instance is available in any monad `m`. -/
+@[expose]
 def vectorCommitment {ι : Type} {m : Type → Type} [Monad m] [DecidableEq α]
     (s : Skeleton) (e : ι ≃ SkeletonLeafIndex s) (hashFn : α → α → α) :
     VectorCommitment m ι α α (FullData α s) (List α) where
@@ -77,6 +79,7 @@ A batch opening for a list of positions is simply the list of their individual a
 independently. This shares no interior hashes between paths, hence *naive* — a dedicated multi-leaf
 Merkle proof could compress the common prefixes — but it is correct and requires nothing beyond the
 single-position instance. -/
+@[expose]
 def naiveBatchOpenMerkleTree {ι : Type} {m : Type → Type} [Monad m]
     [DecidableEq ι] [DecidableEq α]
     (s : Skeleton) (e : ι ≃ SkeletonLeafIndex s) (hashFn : α → α → α) :

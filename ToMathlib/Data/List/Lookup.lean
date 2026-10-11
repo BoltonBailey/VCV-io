@@ -15,7 +15,7 @@ public import Mathlib.Data.List.Basic
 is the shape produced when one tabulates a function `f` over a list of keys.
 -/
 
-@[expose] public section
+public section
 
 namespace List
 

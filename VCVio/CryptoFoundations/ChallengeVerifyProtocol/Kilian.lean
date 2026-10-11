@@ -57,7 +57,7 @@ possible outputs of the honest parties are given by `[MonadAttach m]`. The PCP i
 preserve distributions (`hfaithful`) and, for completeness, not to enlarge supports (`hlift`).
 -/
 
-@[expose] public section
+public section
 
 open OracleComp OracleSpec
 
@@ -92,6 +92,7 @@ variable {Stmt Wit : Type}
 /-- Run the PCP verifier on statement `stmt` with fixed coins `coins` against a concrete proof
   string `proof`, answering each oracle query for position `i` with `proof.get i`. Since the coins
   are fixed and the proof is concrete, the result is a deterministic accept/reject bit. -/
+@[expose]
 def runVerifier (pcp : PCP Stmt Wit) (stmt : Stmt) (coins : pcp.Coins)
     (proof : List.Vector pcp.Symbol pcp.length) : Bool :=
   Id.run <| simulateQ (QueryImpl.ofListVector proof) (pcp.Verifier stmt coins)
@@ -99,6 +100,7 @@ def runVerifier (pcp : PCP Stmt Wit) (stmt : Stmt) (coins : pcp.Coins)
 /-- A PCP system satisfies **correctness** with error `correctnessError` if for every
   statement/witness pair `(stmt, wit)` in the relation, the honest verifier accepts a proof
   produced by the honest prover with probability at least `1 - correctnessError`. -/
+@[expose]
 noncomputable def correctness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
     (correctnessError : ℝ≥0) : Prop :=
   ∀ stmt : Stmt,
@@ -110,6 +112,7 @@ noncomputable def correctness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
           return pcp.runVerifier stmt coins proof)}[accept] ≥ 1 - correctnessError
 
 /-- A PCP system satisfies **perfect correctness** if it satisfies correctness with no error. -/
+@[expose]
 noncomputable def perfectCorrectness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) : Prop :=
   pcp.correctness rel 0
 
@@ -120,6 +123,7 @@ noncomputable def perfectCorrectness (pcp : PCP Stmt Wit) (rel : Stmt → Wit �
   Since the verifier's only source of randomness is its own coin tosses, it suffices to quantify
   over fixed proof strings: a randomized malicious prover is a convex combination of these, so it
   can do no better than the best fixed proof. -/
+@[expose]
 noncomputable def soundness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
     (soundnessError : ℝ≥0) : Prop :=
   ∀ stmt : Stmt,
@@ -131,6 +135,7 @@ noncomputable def soundness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
 
 /-- A PCP system satisfies **perfect soundness** if it satisfies soundness with no error, i.e. the
   verifier never accepts a proof for a statement outside the language. -/
+@[expose]
 noncomputable def perfectSoundness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) : Prop :=
   pcp.soundness rel 0
 
@@ -154,6 +159,7 @@ variable {ι : Type u} {spec : OracleSpec ι}
 
 /-- The inputs a deterministic computation queries when its oracles are answered by `so`, in the
 order they are read: the `QueryImpl.withLogging` query log with each entry's response discarded. -/
+@[expose]
 def pathLog (so : QueryImpl spec Id) {α : Type u} (comp : OracleComp spec α) : List ι :=
   ((simulateQ so.withLogging comp).run.2).map Sigma.fst
 
@@ -186,6 +192,7 @@ looking up an input among the claimed `(input, value)` pairs, failing if absent.
 verifier's per-query handler in `KilianTransformation.verify`. It is `QueryImpl.ofFn?` over the
 association-list lookup `claims.lookup`, using that `QueryImpl spec Option` is `QueryImpl spec
 (OptionT Id)`. -/
+@[expose]
 def claimAnswer [BEq ι] (claims : List (ι × Sym)) : QueryImpl (ι →ₒ Sym) (OptionT Id) :=
   QueryImpl.ofFn? (claims.lookup ·)
 
@@ -235,6 +242,7 @@ Security: `KilianTransformation_perfectlyComplete` derives perfect completeness 
 completeness and commitment correctness, and `KilianTransformation_sound` derives statistical
 soundness (with the PCP's soundness error) from perfect batch position binding of the
 commitment. -/
+@[expose]
 noncomputable def KilianTransformation
     (pcp : PCP Stmt Wit) [BEq pcp.Symbol]
     {m : Type → Type} [Monad m] [MonadLiftT ProbComp m]

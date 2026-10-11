@@ -40,7 +40,7 @@ depend on how the verifier draws its challenge, so `ChallengeVerifyProtocol.Soun
 `ChallengeVerifyProtocol.PerfectlySound` take the sampler `sampleChal : m Chal` as an argument.
 -/
 
-@[expose] public section
+public section
 
 universe u v
 
@@ -63,6 +63,7 @@ Because the protocol is public-coin and `verify` is deterministic, quantifying e
 the response after the challenge is drawn dominates every prover strategy, so no prover model is
 needed: whatever computation produces the response, it can do no better than the best response for
 the sampled challenge. -/
+@[expose]
 def Sound (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal Resp rel m)
     (sampleChal : m Chal) (soundnessError : ℝ≥0) : Prop :=
   ∀ x : Stmt, (¬ ∃ w : Wit, rel x w) → ∀ pc : Commit,
@@ -72,6 +73,7 @@ def Sound (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal Resp rel m
 /-- A protocol is perfectly sound for the challenge sampler `sampleChal` if it is sound with no
 error: outside the language, the set of challenges admitting any accepted response has probability
 zero. -/
+@[expose]
 def PerfectlySound (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal Resp rel m)
     (sampleChal : m Chal) : Prop :=
   σ.Sound sampleChal 0
@@ -90,6 +92,7 @@ The extractor is taken as a parameter rather than being a field of `ChallengeVer
 a protocol's interaction (`commit`/`respond`/`verify`) is independent of any particular
 witness-extraction strategy. For a protocol that does bundle an extractor, see
 `SigmaProtocol.SpeciallySoundAt`. -/
+@[expose]
 def SpeciallySoundAt (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal Resp rel m)
     (extract : Chal → Resp → Chal → Resp → m Wit) (x : Stmt) : Prop :=
   ∀ pc ω₁ ω₂ p₁ p₂, ω₁ ≠ ω₂ →
@@ -98,6 +101,7 @@ def SpeciallySoundAt (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal
 
 /-- A protocol is specially sound (relative to `extract`) if `SpeciallySoundAt` holds for all
 statements. -/
+@[expose]
 def SpeciallySound (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal Resp rel m)
     (extract : Chal → Resp → Chal → Resp → m Wit) : Prop :=
   ∀ x, SpeciallySoundAt σ extract x

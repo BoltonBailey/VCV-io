@@ -52,7 +52,7 @@ output of a bind comes from possible outputs of its two halves. No probability s
 needed: binding is a property of the deterministic verifier.
 -/
 
-@[expose] public section
+public section
 
 /-- A vector commitment whose `commit` and `openAt` operations run in the monad `m`.
 
@@ -81,6 +81,7 @@ variable {m : Type → Type} {ι α Commit State Opening : Type}
 
 /-- A vector commitment is **perfectly correct** if, for every vector and position, any honestly
 produced commitment/state opens at that position to the committed value and passes verification. -/
+@[expose]
 def PerfectlyCorrect [MonadAttach m] (vc : VectorCommitment m ι α Commit State Opening) : Prop :=
   ∀ (data : ι → α) (i : ι) (c : Commit) (st : State),
     (c, st) ∈ support (vc.commit data) →
@@ -90,6 +91,7 @@ def PerfectlyCorrect [MonadAttach m] (vc : VectorCommitment m ι α Commit State
 to two different values: any two openings that both verify at the same position and commitment must
 certify the same value. This is the property that makes the commitment useful for soundness in
 consumers like the Kilian transformation. -/
+@[expose]
 def PositionBinding (vc : VectorCommitment m ι α Commit State Opening) : Prop :=
   ∀ (c : Commit) (i : ι) (v₁ : α) (op₁ : Opening) (v₂ : α) (op₂ : Opening),
     vc.verifyOpen c i v₁ op₁ = true → vc.verifyOpen c i v₂ op₂ = true → v₁ = v₂
@@ -120,6 +122,7 @@ variable {m : Type → Type} [Monad m] {ι α Commit State Opening : Type}
 requested position individually and bundling the results. A batch opening is the list of
 `(position, opening)` pairs; `verifyBatch` checks that each claimed `(position, value)` pair is
 matched by an entry whose opening verifies that value. -/
+@[expose]
 def toBatchOpening [DecidableEq ι]
     (vc : VectorCommitment m ι α Commit State Opening) :
     BatchOpeningVectorCommitment m ι α Commit State (List (ι × Opening)) where
@@ -141,6 +144,7 @@ variable {m : Type → Type} {ι α Commit State BatchOpening : Type}
 
 /-- Turn a `BatchOpeningVectorCommitment` into a single-position `VectorCommitment` by opening and
 verifying singleton batches. The opening type is the underlying `BatchOpening`. -/
+@[expose]
 def toVectorCommitment (bovc : BatchOpeningVectorCommitment m ι α Commit State BatchOpening) :
     VectorCommitment m ι α Commit State BatchOpening where
   commit := bovc.commit
@@ -155,6 +159,7 @@ variable [MonadAttach m]
 of positions, any honestly produced commitment/state opens that list to a batch opening that
 verifies the corresponding committed claims. The claim list `is.map (fun i => (i, data i))` is
 exactly the shape consumers (such as the Kilian transformation) hand to `verifyBatch`. -/
+@[expose]
 def PerfectlyCorrect
     (bovc : BatchOpeningVectorCommitment m ι α Commit State BatchOpening) : Prop :=
   ∀ (data : ι → α) (is : List ι) (c : Commit) (st : State),
@@ -172,6 +177,7 @@ deterministic `verifyBatch` field, so they need no monadic structure on `m` at a
 /-- A batch-opening vector commitment is **position binding** if no commitment can be opened at a
 single position to two different values: any two (singleton) batch openings that both verify at the
 same position and commitment must certify the same value. -/
+@[expose]
 def PositionBinding (bovc : BatchOpeningVectorCommitment m ι α Commit State BatchOpening) : Prop :=
   ∀ (c : Commit) (i : ι) (v₁ v₂ : α) (op₁ op₂ : BatchOpening),
     bovc.verifyBatch c [(i, v₁)] op₁ = true → bovc.verifyBatch c [(i, v₂)] op₂ = true → v₁ = v₂
@@ -182,6 +188,7 @@ claims at a common position certify the same value. This is the batch-level stre
 when adversarial claim lists are checked whole, as in the Kilian transformation: it lets every
 claimed value be read off a single function of the commitment (`committedValue`). Taking the two
 openings equal also makes each individual claim list self-consistent across duplicate positions. -/
+@[expose]
 def BatchPositionBinding
     (bovc : BatchOpeningVectorCommitment m ι α Commit State BatchOpening) : Prop :=
   ∀ (c : Commit) (claims₁ claims₂ : List (ι × α)) (op₁ op₂ : BatchOpening) (i : ι) (v₁ v₂ : α),
@@ -202,6 +209,7 @@ some verifying batch, or `default` if no batch can open `i` at all. Under `Batch
 the choice is unique, so every verifying claim reads off this function
 (`BatchPositionBinding.committedValue_eq`): an adversary interacting from a fixed commitment is
 semantically committed to the full vector `bovc.committedValue c`, with no extractor needed. -/
+@[expose]
 noncomputable def committedValue [Inhabited α]
     (bovc : BatchOpeningVectorCommitment m ι α Commit State BatchOpening)
     (c : Commit) (i : ι) : α :=

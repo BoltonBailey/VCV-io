@@ -1304,7 +1304,7 @@ Unlike the Fiat-Shamir transform (which is perfectly complete), the Fischlin tra
 has a non-zero completeness error because the prover's proof-of-work search may fail
 to find hash values whose sum is at most `S`. -/
 theorem almostComplete [DecidableEq Stmt] [DecidableEq Commit] [DecidableEq Chal]
-    [DecidableEq Resp] [FinEnum Chal] [Inhabited Chal] [Inhabited Resp] [SampleableType Chal]
+    [DecidableEq Resp] [FinEnum Chal] [Inhabited Chal] [Inhabited Resp]
     [DecidableEq M] (hρ : 0 < ρ) (hc : σ.PerfectlyComplete) (msg : M) :
     (runtime ρ b M).evalDist (do
       let (pk, sk) ←

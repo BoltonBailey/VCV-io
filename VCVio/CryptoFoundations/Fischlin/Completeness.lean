@@ -1219,7 +1219,7 @@ minimum hashes exceeds `S`. By pigeonhole some repetition's minimum exceeds `⌊
 bound over the `ρ` repetitions together with the per-repetition tail bound
 `minUnifAux_prEvent_gt_none` yields the result. -/
 private lemma model_reject_le [FinEnum Chal] [Inhabited Chal] [Inhabited Resp]
-    [SampleableType Chal] (_hρ : 0 < ρ) (hc : σ.PerfectlyComplete) (_msg : M) :
+    (_hρ : 0 < ρ) (hc : σ.PerfectlyComplete) (_msg : M) :
     𝒟[modelGame σ hr ρ b S] {false} ≤ completenessError ρ b S (FinEnum.card Chal) := by
   rw [← prEvent_eq_evalDist_singleton, modelGame]
   -- Peel the key-generation and commitment phases; on the support `rel pk sk` holds.

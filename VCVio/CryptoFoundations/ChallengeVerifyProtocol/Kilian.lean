@@ -75,12 +75,20 @@ open OracleComp OracleSpec
   Kilian transformation: the verifier *sends* its coins, and the prover then simulates `Verifier
   stmt coins` to learn exactly which positions to open. -/
 structure PCP (Stmt Wit : Type) where
+  /-- The alphabet of the proof string. -/
   Symbol : Type
+  /-- The alphabet is finite. -/
   [finSymbol : Fintype Symbol]
+  /-- The number of symbols in a proof string. -/
   length : ℕ
+  /-- The verifier's random coins. -/
   Coins : Type
+  /-- The verifier's coin sampler. -/
   sampleCoins : ProbComp Coins
+  /-- The honest prover, producing a proof string from a statement and a witness. -/
   Prover : Stmt → Wit → ProbComp (List.Vector Symbol length)
+  /-- The verifier on given coins: it queries positions of the proof string and accepts or
+  rejects. -/
   Verifier : Stmt → Coins → OracleComp (Fin length →ₒ Symbol) Bool
 
 namespace PCP
@@ -244,7 +252,7 @@ soundness (with the PCP's soundness error) from perfect batch position binding o
 commitment. -/
 @[expose]
 noncomputable def KilianTransformation
-    (pcp : PCP Stmt Wit) [BEq pcp.Symbol]
+    (pcp : PCP Stmt Wit)
     {m : Type → Type} [Monad m] [MonadLiftT ProbComp m]
     {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment m (Fin pcp.length) pcp.Symbol Commit State BatchOpening)
@@ -365,7 +373,7 @@ provided:
 The novel content is the `claimAnswer_run` replay: the verifier's failing `OptionT` replay against
 the openings reproduces the bare PCP run, so it accepts exactly when the PCP run does. -/
 theorem KilianTransformation_verify_eq_true
-    (pcp : PCP Stmt Wit) [BEq pcp.Symbol]
+    (pcp : PCP Stmt Wit)
     {m : Type → Type} [Monad m] [MonadLiftT ProbComp m] {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment m (Fin pcp.length) pcp.Symbol Commit State BatchOpening)
     (boolRel : Stmt → Wit → Bool)
@@ -452,7 +460,7 @@ probabilistic structure, showing that the honest transcript is lossless and that
 can produce is accepted. At `m := ProbComp` the lift hypotheses hold by definition and no
 computation fails; see `KilianTransformation_perfectlyComplete_probComp`. -/
 theorem KilianTransformation_perfectlyComplete
-    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol]
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
     {m : Type → Type} [Monad m] [LawfulMonad m] [MonadLiftT ProbComp m]
     [EvalDistSemantics m] [LawfulEvalDistSemantics m] [MonadAttach m] [WeaklyLawfulMonadAttach m]
     {Commit State BatchOpening : Type}
@@ -491,7 +499,7 @@ theorem KilianTransformation_perfectlyComplete
 `KilianTransformation_perfectlyComplete` needs only commitment correctness, PCP completeness, and
 a coin sampler with full support. -/
 theorem KilianTransformation_perfectlyComplete_probComp
-    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol]
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
     {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment ProbComp (Fin pcp.length) pcp.Symbol Commit State
       BatchOpening)
@@ -516,7 +524,7 @@ committed proof string `bovc.committedValue c`, and the successful replay then r
 verifier's run on that string: the PCP verifier accepts `committedValue c` on these coins. No
 extractor or rewinding appears — the commitment itself determines the proof string. -/
 theorem runVerifier_committedValue_of_KilianTransformation_verify
-    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol] [Inhabited pcp.Symbol]
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [Inhabited pcp.Symbol]
     {m : Type → Type} [Monad m] [MonadLiftT ProbComp m] {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment m (Fin pcp.length) pcp.Symbol Commit State BatchOpening)
     (hbind : bovc.BatchPositionBinding)
@@ -558,7 +566,7 @@ knowledge soundness. `hfaithful` is the same distribution-faithfulness of the `P
 required by `KilianTransformation_perfectlyComplete`; at `m := ProbComp` it holds by definition
 (`KilianTransformation_sound_probComp`). -/
 theorem KilianTransformation_sound
-    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol] [Inhabited pcp.Symbol]
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [Inhabited pcp.Symbol]
     {m : Type → Type} [Monad m] [MonadLiftT ProbComp m] [EvalDistSemantics m]
     {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment m (Fin pcp.length) pcp.Symbol Commit State BatchOpening)
@@ -585,7 +593,7 @@ theorem KilianTransformation_sound
 `ProbComp`, the verifier draws its challenge with the PCP's coin sampler itself, and
 `KilianTransformation_sound` needs only perfect batch position binding and PCP soundness. -/
 theorem KilianTransformation_sound_probComp
-    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol] [Inhabited pcp.Symbol]
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [Inhabited pcp.Symbol]
     {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment ProbComp (Fin pcp.length) pcp.Symbol Commit State
       BatchOpening)

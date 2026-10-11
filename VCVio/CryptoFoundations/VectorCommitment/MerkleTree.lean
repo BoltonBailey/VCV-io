@@ -88,14 +88,7 @@ def naiveBatchOpenMerkleTree {ι : Type} {m : Type → Type} [Monad m]
 
 /-! ### Correctness -/
 
-/-- Eta for `List.Vector`: rebuilding the subtype from `v.toList` returns `v`. -/
-@[simp]
-theorem vector_mk_toList {n : ℕ} (v : List.Vector α n) (h : v.toList.length = n) :
-    (⟨v.toList, h⟩ : List.Vector α n) = v :=
-  List.Vector.toList_injective (List.Vector.toList_mk _ _)
-
 /-- Rebuilding a tree from leaf data `ld` and reading its leaves back recovers `ld`. -/
-@[simp]
 theorem toLeafData_buildMerkleTreeWithHash {s : Skeleton}
     (ld : LeafData α s) (hashFn : α → α → α) :
     (buildMerkleTreeWithHash ld hashFn).toLeafData = ld := by
@@ -127,7 +120,7 @@ theorem vectorCommitment_perfectlyCorrect {ι : Type} {m : Type → Type} [Monad
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcst).symm
   obtain rfl := LawfulMonadAttach.eq_of_canReturn_pure hop
   simp only [vectorCommitment, List.Vector.toList_length, dite_true,
-    decide_eq_true_eq, vector_mk_toList]
+    decide_eq_true_eq, List.Vector.mk_toList]
   simpa [get_leafDataOfFn] using
     functional_completeness (e i) (leafDataOfFn s fun j => data (e.symm j)) hashFn
 

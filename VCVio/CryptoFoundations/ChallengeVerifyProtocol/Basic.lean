@@ -60,7 +60,7 @@ the sampled challenge. -/
 def Sound (σ : ChallengeVerifyProtocol Stmt Wit Commit PrvState Chal Resp rel m)
     (soundnessError : ℝ≥0) : Prop :=
   ∀ x : Stmt, (¬ ∃ w : Wit, rel x w) → ∀ pc : Commit,
-    Pr[ fun chal => ∃ resp : Resp, σ.verify x pc chal resp = true | σ.sampleChal ]
+    Pr{let chal ← σ.sampleChal}[∃ resp : Resp, σ.verify x pc chal resp = true]
       ≤ soundnessError
 
 /-- A protocol is perfectly sound if it is sound with no error: outside the language, the set of

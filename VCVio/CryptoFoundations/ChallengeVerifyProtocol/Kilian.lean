@@ -9,7 +9,7 @@ module
 public import VCVio.CryptoFoundations.VectorCommitment.Basic
 public import VCVio.CryptoFoundations.ChallengeVerifyProtocol.Basic
 public import VCVio.OracleComp.ProbComp
-public import VCVio.OracleComp.QueryTracking.LoggingOracle
+public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import ToMathlib.Data.List.Lookup
 
 /-!
@@ -91,10 +91,10 @@ noncomputable def correctness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
   ∀ stmt : Stmt,
   ∀ wit : Wit,
     rel stmt wit →
-      Pr[ fun accept => accept | do
+      Pr{let accept ← (do
           let proof ← pcp.Prover stmt wit
           let coins ← pcp.sampleCoins
-          return pcp.runVerifier stmt coins proof] ≥ 1 - correctnessError
+          return pcp.runVerifier stmt coins proof)}[accept] ≥ 1 - correctnessError
 
 /-- A PCP system satisfies **perfect correctness** if it satisfies correctness with no error. -/
 noncomputable def perfectCorrectness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) : Prop :=
@@ -112,9 +112,9 @@ noncomputable def soundness (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
   ∀ stmt : Stmt,
     (¬ ∃ wit : Wit, rel stmt wit) →
   ∀ proof : List.Vector pcp.Symbol pcp.length,
-    Pr[ fun accept => accept | do
+    Pr{let accept ← (do
         let coins ← pcp.sampleCoins
-        return pcp.runVerifier stmt coins proof] ≤ soundnessError
+        return pcp.runVerifier stmt coins proof)}[accept] ≤ soundnessError
 
 /-- A PCP system satisfies **perfect soundness** if it satisfies soundness with no error, i.e. the
   verifier never accepts a proof for a statement outside the language. -/
@@ -402,7 +402,7 @@ theorem perfectCorrectness_accepts_liftedProver
   unfold PCP.perfectCorrectness PCP.correctness at hpcp
   have hpr := hpcp x w hxw
   simp only [ENNReal.coe_zero, tsub_zero, ge_iff_le] at hpr
-  have h1 := le_antisymm probEvent_le_one hpr
+  have h1 := le_antisymm prEvent_le_one hpr
   rw [probEvent_eq_one_iff] at h1
   refine h1.2 _ ?_
   rw [mem_support_bind_iff]
@@ -422,7 +422,7 @@ theorem neverFail_of_perfectCorrectness
   unfold PCP.perfectCorrectness PCP.correctness at hpcp
   have hpr := hpcp x w hxw
   simp only [ENNReal.coe_zero, tsub_zero, ge_iff_le] at hpr
-  have h1 := le_antisymm probEvent_le_one hpr
+  have h1 := le_antisymm prEvent_le_one hpr
   rw [probEvent_eq_one_iff] at h1
   obtain ⟨hProverF, hRest⟩ := (probFailure_bind_eq_zero_iff _ _).mp h1.1
   refine ⟨⟨hProverF⟩, ?_⟩
@@ -470,7 +470,7 @@ theorem KilianTransformation_perfectlyComplete
   have transport : ∀ {β : Type} (mx : ProbComp β), NeverFail mx → NeverFail (liftM mx : m β) := by
     intro β mx h
     rw [neverFail_iff]
-    unfold probFailure
+    unfold prFail
     rw [hfaithful mx]
     exact (neverFail_iff _).mp h
   have hAccept := perfectCorrectness_accepts_liftedProver pcp rel hlift hpcp
@@ -564,19 +564,19 @@ theorem KilianTransformation_sound
   set proofStr := List.Vector.ofFn (bovc.committedValue pc) with hproofStr
   -- Move the probability from the protocol's lifted challenge sampler to its `ProbComp` source.
   have hswap : ∀ p : pcp.Coins → Prop,
-      Pr[ p | (liftM pcp.sampleCoins : m pcp.Coins) ] = Pr[ p | pcp.sampleCoins ] := fun p => by
+      Pr{let x ← (liftM pcp.sampleCoins : m pcp.Coins)}[p x] = Pr{let x ← pcp.sampleCoins}[p x] := fun p => by
     unfold probEvent
     rw [hfaithful pcp.sampleCoins]
   have hchal : (KilianTransformation pcp bovc rel).sampleChal
       = (liftM pcp.sampleCoins : m pcp.Coins) := rfl
   rw [hchal, hswap]
   -- PCP soundness at the committed proof string, in event-over-coins form.
-  have hfinal : Pr[ fun coins => pcp.runVerifier x coins proofStr = true | pcp.sampleCoins ]
+  have hfinal : Pr{let coins ← pcp.sampleCoins}[pcp.runVerifier x coins proofStr = true]
       ≤ (ε : ℝ≥0∞) := by
     have h := hpcp x hx proofStr
-    simp only [bind_pure_comp, probEvent_map] at h
+    simp only [bind_pure_comp, prEvent_map] at h
     exact h
-  refine (probEvent_mono fun coins _ hcoins => ?_).trans hfinal
+  refine (prEvent_mono fun coins _ hcoins => ?_).trans hfinal
   obtain ⟨resp, hresp⟩ := hcoins
   exact runVerifier_committedValue_of_KilianTransformation_verify
     pcp rel bovc hbind x pc coins resp hresp

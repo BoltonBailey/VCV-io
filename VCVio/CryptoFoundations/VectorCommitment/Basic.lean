@@ -5,7 +5,7 @@ Authors: Bolton Bailey
 -/
 module
 
-public import VCVio.EvalDist.TVDist
+public import VCVio.EvalDist.MeasureTVDist.Basic
 
 /-!
 # Vector Commitments

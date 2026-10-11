@@ -15,7 +15,7 @@ Small compile-time instantiations of the whole-adversary game theorem with real 
 checkpoint-dependent claims, and proof-frontier disagreement.
 -/
 
-@[expose] public section
+public section
 
 open OracleComp OracleSpec
 
@@ -25,8 +25,8 @@ open BinaryTree InductiveMerkleTree _root_.MerkleTreeMultiExtractability
 
 abbrev Query := Bool × Bool
 
-noncomputable local instance : IsUniformSpec (Query →ₒ Bool) :=
-  IsUniformSpec.ofFintypeInhabited (Query →ₒ Bool)
+noncomputable local instance : UniformAnswerMeasure (Query →ₒ Bool) :=
+  UniformAnswerMeasure.ofFiniteNonempty (Query →ₒ Bool)
 
 /-- Unaddressed Boolean hashes packaged through the query-parametric node interface. -/
 def model : MerkleTreeExtractability.NodeQueryModel Query Unit Bool where
@@ -37,6 +37,7 @@ def model : MerkleTreeExtractability.NodeQueryModel Query Unit Bool where
   address_mkQuery := by intros; rfl
   input_mkQuery := by intros; rfl
 
+@[expose]
 def skeleton : Skeleton :=
   .internal .leaf .leaf
 
@@ -102,8 +103,8 @@ private theorem querying_verifier_bound : queryingAdversary.HasVerifierQueryBoun
 /-- Nonzero canary for the uniform-shape theorem: the adversarial budget charges one query per
 commitment plus the terminal query, while the honest verifier remains separately zero-cost. -/
 theorem queryingGlobalStrongBound (rounds : ℕ) :
-    Pr[ Transcript.HasAnyCheckpointExtractionDisagreement model |
-      extractabilityGame model config rounds queryingAdversary] ≤
+    Pr{let z ← extractabilityExperiment model config rounds
+           queryingAdversary}[Transcript.HasAnyCheckpointExtractionDisagreement model z] ≤
       (multiCheckpointROMErrorNumerator (rounds * 3) rounds 0 (rounds + 1) : ENNReal) *
         (Nat.card Bool : ENNReal)⁻¹ := by
   exact anyCheckpointDisagreement_rom_bound_uniformShape model config rounds queryingAdversary
@@ -170,8 +171,8 @@ private theorem claiming_verifier_bound (rounds : ℕ) :
 opening continuation to depend on the extractor state. It exercises the accounting bridge used to
 separate ghost continuation queries from real adversarial queries. -/
 theorem claimingGlobalStrongBound (rounds : ℕ) :
-    Pr[ Transcript.HasAnyCheckpointExtractionDisagreement model |
-        extractabilityGame model config rounds (claimingAdversary rounds)] ≤
+    Pr{let z ← extractabilityExperiment model config rounds
+           (claimingAdversary rounds)}[Transcript.HasAnyCheckpointExtractionDisagreement model z] ≤
       (multiCheckpointROMErrorNumerator (rounds * 3) rounds rounds rounds : ENNReal) *
         (Nat.card Bool : ENNReal)⁻¹ := by
   exact anyCheckpointDisagreement_rom_bound_uniformShape model config rounds
@@ -181,6 +182,7 @@ theorem claimingGlobalStrongBound (rounds : ℕ) :
 
 /-! ## Proof-only full-opening disagreement -/
 
+@[expose]
 def selectRight : LeafData Bool skeleton :=
   .internal (.leaf false) (.leaf true)
 

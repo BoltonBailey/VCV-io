@@ -12,7 +12,7 @@ public import VCVio.CryptoFoundations.MerkleTree.MultiExtractability.Sequential
 /-!
 # Execution Bridge for One Sequential Commitment Phase
 
-`probEvent_stablePhaseRunFrom_le` exposes a raw commitment computation through the combined
+`prEvent_stablePhaseRunFrom_le` exposes a raw commitment computation through the combined
 caching/logging interpreter. The executable sequential runner instead uses `withQueryLog` inside
 the oracle syntax and records the returned phase-local suffix. This module proves that the two
 views are equal when the interpreter's initial cumulative log is the extractor state's log.
@@ -30,7 +30,7 @@ variable {Cfg Query Address Y S R : Type}
 is exactly the executable `withQueryLog` prefix followed by a suffix receiving the accumulated
 log.  This theorem is useful both for commitment phases and for the terminal opening phase. -/
 theorem adaptivePrefixRunFrom_eq_withQueryLog
-    [DecidableEq Query] [DecidableEq Y]
+    [DecidableEq Query]
     (prefixComp : OracleComp (Query →ₒ Y) S)
     (suffix : S → (Query →ₒ Y).QueryLog → OracleComp (Query →ₒ Y) R)
     (cache : (Query →ₒ Y).QueryCache) (log : (Query →ₒ Y).QueryLog) :
@@ -47,9 +47,10 @@ theorem adaptivePrefixRunFrom_eq_withQueryLog
 /-- Executable `withQueryLog` form of the stable online phase theorem.  The abstract continuation
 is used only for structural query accounting; `suffix` is the computation actually executed
 after the logged prefix. -/
-theorem probEvent_withQueryLog_stablePhase_le
+theorem prEvent_withQueryLog_stablePhase_le
     [DecidableEq Query] [DecidableEq Address] [DecidableEq Y]
-    [Finite Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+    [Finite Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (view : MerkleTreeExtractor.QueryView Query Address Y)
     {config : Configuration Cfg Address}
     (state : ExtractorState Cfg Query Address Y config)
@@ -79,26 +80,24 @@ theorem probEvent_withQueryLog_stablePhase_le
       (∀ input value, terminalCache input = some value →
         ∃ entry ∈ terminalLog, entry.1 = input ∧ entry.2 = value) →
       state.StableAt view terminalLog →
-      Pr[ fun z => win z.1 | (simulateQ (Query →ₒ Y).cachingOracle
-          (suffix x terminalLog)).run terminalCache] ≤
+      Pr{let z ← (simulateQ (Query →ₒ Y).cachingOracle (suffix x terminalLog)).run
+             terminalCache}[win z.1] ≤
         (multiCheckpointErrorNumerator nodeBudget checkpointCount overhead
           terminalRemaining terminalCached : ENNReal) *
             (Nat.card Y : ENNReal)⁻¹) :
-    Pr[ fun z => win z.1 |
-      (simulateQ (Query →ₒ Y).cachingOracle
-        (prefixComp.withQueryLog >>= fun phaseResult =>
-          suffix phaseResult.1 (log ++ phaseResult.2))).run cache] ≤
+    Pr{let z ← (simulateQ (Query →ₒ Y).cachingOracle (prefixComp.withQueryLog >>= fun phaseResult
+           => suffix phaseResult.1 (log ++ phaseResult.2))).run cache}[win z.1] ≤
       (multiCheckpointErrorNumerator nodeBudget checkpointCount overhead remaining cached :
         ENNReal) * (Nat.card Y : ENNReal)⁻¹ := by
   rw [← adaptivePrefixRunFrom_eq_withQueryLog prefixComp suffix cache log]
-  exact probEvent_stablePhaseRunFrom_le view state suffix continuation win
+  exact prEvent_stablePhaseRunFrom_le view state suffix continuation win
     nodeBudget checkpointCount overhead prefixComp remaining cached hbound cache log
     hno hcacheBound hlogCache hcacheLog hstable hnodeBudget hcheckpointCount hterminal
 
 /-- A raw commitment phase followed by cumulative-log recording has exactly the same cached
 semantics as the executable `withQueryLog` phase followed by suffix recording. -/
 theorem adaptivePrefixRunFrom_commit_eq
-    [DecidableEq Query] [DecidableEq Y]
+    [DecidableEq Query]
     {config : Configuration Cfg Address}
     (extractorState : ExtractorState Cfg Query Address Y config)
     (commit : OracleComp (Query →ₒ Y) (Cfg × Y × S))

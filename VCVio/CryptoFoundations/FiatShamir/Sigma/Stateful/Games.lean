@@ -9,7 +9,7 @@ public import VCVio.CryptoFoundations.FiatShamir.Sigma
 public import VCVio.CryptoFoundations.FiatShamir.Sigma.Stateful.Spec
 public import VCVio.CryptoFoundations.HardnessAssumptions.HardRelation
 public import VCVio.CryptoFoundations.SigmaProtocol
-public import VCVio.OracleComp.QueryTracking.LoggingOracle
+public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Basic
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 public import VCVio.OracleComp.SimSemantics.StateT.Basic
@@ -164,8 +164,7 @@ direct named CMA game. -/
 @[reducible, fs_simp] def fsBaseImpl :
     QueryImpl (unifSpec + roSpec M Commit Chal)
       (StateT (RoCache M Commit Chal) ProbComp) :=
-  unifFwdImpl (roSpec M Commit Chal) +
-    (randomOracle : QueryImpl (roSpec M Commit Chal) _)
+  (roSpec M Commit Chal).romImpl
 
 /-- Fixed-key real Fiat-Shamir signing over the shared random-oracle cache. -/
 @[reducible, fs_simp] def cmaRealFixedSign
@@ -228,7 +227,7 @@ direct named CMA game. -/
               pure ((c, π), ((log ++ [m], cache.cacheQuery (m, c) ch, some (pk, sk)), bad))
 
 /-- Source-query part of the real CMA game over the concrete sum interface used
-by `SignatureAlg.unforgeableAdv`. -/
+by `SignatureAlg.UnforgeableAdversary`. -/
 @[fs_simp] def cmaRealSourceFullSum
     (sigma : SigmaProtocol Stmt Wit Commit PrvState Chal Resp rel ProbComp)
     (hr : GenerableRelation Stmt Wit rel) :

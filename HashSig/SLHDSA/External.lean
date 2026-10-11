@@ -1,12 +1,13 @@
 /-
-Copyright (c) 2026 Quang Dao. All rights reserved.
+Copyright (c) 2026 Quang Dao, Alexander Hicks. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Quang Dao
+Authors: Quang Dao, Alexander Hicks
 -/
 
 module
 public import HashSig.SLHDSA.GeneralScheme
-public import VCVio.OracleComp.Constructions.SampleableType
+public import VCVio.OracleComp.Constructions.SampleableType.Basic
+public import VCVio.OracleComp.Constructions.SampleableType.Measure
 
 /-!
 # SLH-DSA external interfaces
@@ -58,12 +59,12 @@ def requireContext (context : List Byte) : Except Error Unit :=
 
 /-- A context within the FIPS 205 255-byte bound passes the boundary check. -/
 theorem requireContext_eq_ok (context : List Byte) (h : context.length ≤ 255) :
-    requireContext context = .ok () := if_pos h
+    requireContext context = .ok () := ite_eq_left h
 
 /-- A context beyond the FIPS 205 255-byte bound is rejected with its observed length. -/
 theorem requireContext_eq_error (context : List Byte) (h : 255 < context.length) :
     requireContext context = .error (.contextTooLong context.length) :=
-  if_neg (Nat.not_le.mpr h)
+  ite_eq_right (Nat.not_le.mpr h)
 
 /-- Common FIPS external-message encoder. Domain `0` denotes pure signing and domain `1`
 denotes pre-hash signing. -/

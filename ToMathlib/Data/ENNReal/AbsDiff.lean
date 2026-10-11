@@ -6,6 +6,7 @@ Authors: Quang Dao
 module
 
 public import Mathlib.Topology.Algebra.InfiniteSum.ENNReal
+public import Mathlib.Topology.EMetricSpace.Weak
 
 /-!
 # Symmetric Absolute Difference and Supporting Lemmas for `ℝ≥0∞`
@@ -20,6 +21,7 @@ interactions. These are the building blocks for total variation distance on `PMF
 
 ## Main results
 
+- `ENNReal.absDiff_eq_edist` — `absDiff` is Mathlib's `edist` on `ℝ≥0∞` (the weak extended metric)
 - `ENNReal.absDiff_toReal` — connection to real-valued absolute difference
 - `ENNReal.absDiff_triangle` — triangle inequality
 - `ENNReal.absDiff_tsum_le` — subadditivity of `absDiff` over infinite sums
@@ -42,25 +44,48 @@ protected def absDiff (a b : ℝ≥0∞) : ℝ≥0∞ := (a - b) + (b - a)
 @[simp] lemma absDiff_self (a : ℝ≥0∞) : ENNReal.absDiff a a = 0 := by
   simp [ENNReal.absDiff]
 
+@[simp] lemma absDiff_zero_left (a : ℝ≥0∞) : ENNReal.absDiff 0 a = a := by
+  simp [ENNReal.absDiff]
+
+@[simp] lemma absDiff_zero_right (a : ℝ≥0∞) : ENNReal.absDiff a 0 = a := by
+  simp [ENNReal.absDiff]
+
 lemma absDiff_comm (a b : ℝ≥0∞) : ENNReal.absDiff a b = ENNReal.absDiff b a := by
   simp [ENNReal.absDiff, add_comm]
 
 lemma absDiff_le_add (a b : ℝ≥0∞) : ENNReal.absDiff a b ≤ a + b :=
   add_le_add tsub_le_self tsub_le_self
 
-private lemma tsub_le_tsub_add_tsub (a b c : ℝ≥0∞) : a - c ≤ (a - b) + (b - c) := by
-  rw [tsub_le_iff_right]
-  calc a ≤ (a - b) + b := le_tsub_add
-    _ ≤ (a - b) + ((b - c) + c) := by gcongr; exact le_tsub_add
-    _ = ((a - b) + (b - c)) + c := (add_assoc _ _ _).symm
+/-- `absDiff` is the extended distance Mathlib puts on `ℝ≥0∞` (through `WithTop ℝ≥0`, a weak
+extended metric: `⊤` is at distance `⊤` from every finite point and `0` from itself). This is the
+bridge from the truncated-subtraction spelling to `edist` and its `WeakPseudoEMetricSpace` lemmas,
+including the closed forms `ENNReal.edist_eq_max` and `ENNReal.edist_le_iff_le_add_right`. -/
+lemma absDiff_eq_edist (a b : ℝ≥0∞) : ENNReal.absDiff a b = edist a b := by
+  induction a with
+  | top => induction b with
+    | top => simp [ENNReal.absDiff]
+    | coe b => simp [ENNReal.absDiff]
+  | coe a => induction b with
+    | top => simp [ENNReal.absDiff]
+    | coe b =>
+      change _ = ((edist a b : ℝ≥0∞))
+      rw [edist_nndist, ENNReal.absDiff, ← ENNReal.coe_sub, ← ENNReal.coe_sub, ← ENNReal.coe_add,
+        NNReal.nndist_eq]
+      congr 1
+      rcases le_total a b with h | h <;> simp [tsub_eq_zero_of_le h]
+
+/-- One of the two truncated differences vanishes, so `absDiff` is their maximum. -/
+lemma absDiff_eq_max (a b : ℝ≥0∞) : ENNReal.absDiff a b = max (a - b) (b - a) := by
+  rw [absDiff_eq_edist, edist_eq_max]
+
+/-- `absDiff a b ≤ c` exactly when each argument is at most the other plus `c`. -/
+lemma absDiff_le_iff {a b c : ℝ≥0∞} : ENNReal.absDiff a b ≤ c ↔ a ≤ b + c ∧ b ≤ a + c := by
+  rw [absDiff_eq_edist, edist_le_iff_le_add_right]
 
 lemma absDiff_triangle (a b c : ℝ≥0∞) :
     ENNReal.absDiff a c ≤ ENNReal.absDiff a b + ENNReal.absDiff b c := by
-  unfold ENNReal.absDiff
-  calc (a - c) + (c - a)
-      ≤ ((a - b) + (b - c)) + ((c - b) + (b - a)) :=
-        add_le_add (tsub_le_tsub_add_tsub a b c) (tsub_le_tsub_add_tsub c b a)
-    _ = ((a - b) + (b - a)) + ((b - c) + (c - b)) := by ring
+  simp only [absDiff_eq_edist]
+  exact WeakPseudoEMetricSpace.edist_triangle a b c
 
 /-- `|a - b| + 2·min a b = a + b`, the truncated-subtraction form of the identity that splits a
 total mass into its overlap and its discrepancy. -/
@@ -73,16 +98,6 @@ lemma absDiff_add_two_mul_min (a b : ℝ≥0∞) :
       = (a - b + a ⊓ b) + ((b - a) + b ⊓ a) := by rw [inf_comm b a]; ac_rfl
     _ = a + b := by rw [h1, h2]
 
-/-- `|a - b| + (a + b) = 2 · max a b`, the truncated-subtraction form of the identity that
-recovers the larger of two masses from their discrepancy and their total. -/
-lemma absDiff_add_add_eq_two_mul_sup (a b : ℝ≥0∞) :
-    ENNReal.absDiff a b + (a + b) = 2 * (a ⊔ b) := by
-  rcases le_total a b with hab | hab
-  · rw [ENNReal.absDiff, tsub_eq_zero_of_le hab, zero_add, ← add_assoc,
-      tsub_add_cancel_of_le hab, sup_eq_right.mpr hab, two_mul]
-  · rw [ENNReal.absDiff, tsub_eq_zero_of_le hab, add_zero, add_comm a b, ← add_assoc,
-      tsub_add_cancel_of_le hab, sup_eq_left.mpr hab, two_mul]
-
 lemma absDiff_toReal {a b : ℝ≥0∞} (ha : a ≠ ⊤) (hb : b ≠ ⊤) :
     (ENNReal.absDiff a b).toReal = |a.toReal - b.toReal| := by
   rcases le_total a b with hab | hab
@@ -94,20 +109,6 @@ lemma absDiff_toReal {a b : ℝ≥0∞} (ha : a ≠ ⊤) (hb : b ≠ ⊤) :
     have h2 : b.toReal ≤ a.toReal := (toReal_le_toReal hb ha).mpr hab
     simp only [ENNReal.absDiff, h1, add_zero, abs_of_nonneg (sub_nonneg.mpr h2)]
     exact toReal_sub_of_le hab ha
-
-/-- Two pairs of finite values with equal "cross" totals have equal absolute differences. -/
-lemma absDiff_eq_absDiff_of_add_eq_add {a b c d : ℝ≥0∞}
-    (ha : a ≠ ⊤) (hb : b ≠ ⊤) (hc : c ≠ ⊤) (hd : d ≠ ⊤) (h : a + d = b + c) :
-    ENNReal.absDiff a b = ENNReal.absDiff c d := by
-  have hab : ENNReal.absDiff a b ≠ ⊤ :=
-    ne_top_of_le_ne_top (ENNReal.add_ne_top.mpr ⟨ha, hb⟩) (absDiff_le_add a b)
-  have hcd : ENNReal.absDiff c d ≠ ⊤ :=
-    ne_top_of_le_ne_top (ENNReal.add_ne_top.mpr ⟨hc, hd⟩) (absDiff_le_add c d)
-  rw [← ENNReal.toReal_eq_toReal_iff' hab hcd, absDiff_toReal ha hb, absDiff_toReal hc hd]
-  have h' : a.toReal + d.toReal = b.toReal + c.toReal := by
-    rw [← ENNReal.toReal_add ha hd, ← ENNReal.toReal_add hb hc, h]
-  have : a.toReal - b.toReal = c.toReal - d.toReal := by linarith
-  rw [this]
 
 lemma absDiff_tsub_tsub {a b c : ℝ≥0∞} (ha : a ≤ c) (hb : b ≤ c) (hc : c ≠ ⊤) :
     ENNReal.absDiff (c - a) (c - b) = ENNReal.absDiff a b := by
@@ -126,12 +127,8 @@ lemma absDiff_tsub_tsub {a b c : ℝ≥0∞} (ha : a ≤ c) (hb : b ≤ c) (hc :
     exact ENNReal.add_sub_cancel_left hca_ne
 
 @[simp] lemma absDiff_eq_zero {a b : ℝ≥0∞} : ENNReal.absDiff a b = 0 ↔ a = b := by
-  constructor
-  · intro h
-    have h1 : a - b = 0 := by exact_mod_cast (add_eq_zero.mp h).1
-    have h2 : b - a = 0 := by exact_mod_cast (add_eq_zero.mp h).2
-    exact le_antisymm (tsub_eq_zero_iff_le.mp h1) (tsub_eq_zero_iff_le.mp h2)
-  · rintro rfl; exact absDiff_self _
+  rw [absDiff_eq_edist]
+  exact ⟨WeakEMetricSpace.eq_of_edist_eq_zero, fun h => h ▸ WeakPseudoEMetricSpace.edist_self a⟩
 
 /-! ### Tsum inequalities -/
 

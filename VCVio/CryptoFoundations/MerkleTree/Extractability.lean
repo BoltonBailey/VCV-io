@@ -118,9 +118,40 @@ end Adversary
 
 section ExtractabilityGame
 
-variable [DecidableEq Query] [DecidableEq Address] [DecidableEq Y]
+/--
+Project the logged-prefix of `extractabilityInner` onto `Unit`: discarding both the
+committed root/aux and the query log of the committing adversary recovers the plain
+measurement used to express the combined query bound.
+-/
+private lemma extractabilityInner_logged_prefix_map_unit_eq
+    {s : Skeleton} (𝒜 : Adversary Query Y s) :
+    (fun _ => ()) <$>
+        (𝒜.commit.withQueryLog >>= fun ((root, aux), queryLog) =>
+          𝒜.opening aux >>= fun q => pure (((root, aux), queryLog), q)) =
+      (do let (_root, aux) ← 𝒜.commit
+          let ⟨_idx, _leaf, _proof⟩ ← 𝒜.opening aux
+          pure ()) := by
+  change ((fun _ => ()) <$> ((simulateQ loggingOracle 𝒜.commit).run >>= fun x =>
+    𝒜.opening x.1.2 >>= fun q => pure ((x.1, x.2), q))) = _
+  simpa [map_bind, map_pure] using
+    loggingOracle.run_simulateQ_bind_fst 𝒜.commit
+    (fun (_, aux) => 𝒜.opening aux >>= fun _ => pure ())
 
-omit [DecidableEq Query] in
+private lemma verifyOpening_isTotalQueryBound_skeleton_depth [DecidableEq Y]
+    (model : NodeQueryModel Query Address Y) {s : Skeleton}
+    (addressKey : SkeletonInternalIndex s → Address)
+    (idx : SkeletonLeafIndex s) (leaf root : Y) (proof : List.Vector Y idx.depth) :
+    IsTotalQueryBound (verifyOpening model addressKey idx leaf root proof) s.depth := by
+  unfold verifyOpening
+  exact isTotalQueryBound_bind (n₁ := s.depth) (n₂ := 0)
+    (AddressedMerkleTree.isTotalQueryBound_getPutativeRootAddressedM_skeleton_depth
+      (fun position left right =>
+        liftM ((Query →ₒ Y).query (model.mkQuery (addressKey position) (left, right))))
+      idx leaf proof (fun _ _ _ => ⟨Nat.zero_lt_one, fun _ => trivial⟩))
+    fun _ => trivial
+
+variable [DecidableEq Address] [DecidableEq Y]
+
 /-- A full binary skeleton with `L` leaves has `2L - 1` nodes, so the extractor can
 reconstruct at most that many non-dummy labels, independently of the query-log length. -/
 private lemma extractedTargets_length_le (model : NodeQueryModel Query Address Y) (s : Skeleton)
@@ -129,7 +160,6 @@ private lemma extractedTargets_length_le (model : NodeQueryModel Query Address Y
     (extractedTargets model s addressKey log root).length ≤ 2 * s.leafCount - 1 :=
   MerkleTreeExtractor.targets_length_le model.view s addressKey log root
 
-omit [DecidableEq Query] in
 /-- Every extracted label is either the claimed root or one component of a logged hash
 input. The statement tracks reachability, while forgetting the particular ancestor chain. -/
 private lemma mem_extractedTargets_root_or_log_input
@@ -142,7 +172,6 @@ private lemma mem_extractedTargets_root_or_log_input
   MerkleTreeExtractor.mem_targets_root_or_log_input
     model.view s addressKey log root htarget
 
-omit [DecidableEq Query] in
 /-- If all logged inputs are populated in a finite key set, the distinct extracted labels
 fit in the root plus the two coordinate images of that key set. -/
 private lemma extractedTargets_toFinset_card_le_cacheKeys
@@ -199,7 +228,7 @@ private lemma extractedTargets_toFinset_card_le_cacheKeys
 The oracle syntax underlying the extractability experiment. It runs the committing
 adversary, snapshots that phase's query log for the extractor, runs the opening adversary,
 and finally verifies the opening. Random-function consistency is supplied separately by
-`extractabilityGame`.
+`extractabilityExperiment`.
 -/
 def extractabilityInner (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s) :
@@ -233,7 +262,8 @@ private def extractabilityRest (model : NodeQueryModel Query Address Y) {s : Ske
 opening-and-verification suffix from the resulting state. This is the induction object for the
 stopping-time proof: its query budget decreases structurally, without conditioning on a
 realized commit length. -/
-private def extractabilityRunFrom (model : NodeQueryModel Query Address Y) {s : Skeleton}
+private def extractabilityRunFrom [DecidableEq Query] (model : NodeQueryModel Query Address Y)
+    {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s)
     (commit : OracleComp (Query →ₒ Y) (Y × 𝒜.AuxState))
     (cache : (Query →ₒ Y).QueryCache) (log : (Query →ₒ Y).QueryLog) :=
@@ -256,7 +286,6 @@ private def extractabilityExactPotential
   adaptivePrefixPotential (fun keyCount => min treeTargetCount (2 * keyCount + 1))
     depth remaining cached
 
-omit [DecidableEq Query] in
 private lemma extractabilityInner_eq_commit_bind_rest
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s) :
@@ -283,14 +312,13 @@ def OpeningExtractionFailure {s : Skeleton} {AuxState : Type} :
 /-- The Merkle-tree extractability experiment in the random-oracle model. All queries made
 by the committing adversary, opening adversary, and verifier are interpreted through one
 shared cache, so repeated equal inputs receive the same answer. -/
-def extractabilityGame (model : NodeQueryModel Query Address Y) {s : Skeleton}
-    (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s) :
+def extractabilityExperiment [DecidableEq Query] (model : NodeQueryModel Query Address Y)
+    {s : Skeleton} (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s) :
     OracleComp (Query →ₒ Y) (Y × 𝒜.AuxState ×
         ((idx : SkeletonLeafIndex s) × Y × List.Vector Y idx.depth ×
          FullData (Option Y) s × List.Vector (Option Y) idx.depth × Bool)) :=
   (Query →ₒ Y).withCacheOverlay ∅ (extractabilityInner model addressKey 𝒜)
 
-omit [DecidableEq Query] in
 /--
 Unfold `extractabilityInner` into a nested `bind` whose outer prefix logs the committing
 adversary's queries alongside the opening adversary's output, and whose continuation runs
@@ -313,41 +341,6 @@ private lemma extractabilityInner_eq_bind_verifyOpening
                  verified⟩) := by
   simp only [extractabilityInner, MerkleTreeExtractor.opening_proof, bind_assoc, pure_bind]
 
-omit [DecidableEq Query] [DecidableEq Y] in
-/--
-Project the logged-prefix of `extractabilityInner` onto `Unit`: discarding both the
-committed root/aux and the query log of the committing adversary recovers the plain
-measurement used to express the combined query bound.
--/
-private lemma extractabilityInner_logged_prefix_map_unit_eq
-    {s : Skeleton} (𝒜 : Adversary Query Y s) :
-    (fun _ => ()) <$>
-        (𝒜.commit.withQueryLog >>= fun ((root, aux), queryLog) =>
-          𝒜.opening aux >>= fun q => pure (((root, aux), queryLog), q)) =
-      (do let (_root, aux) ← 𝒜.commit
-          let ⟨_idx, _leaf, _proof⟩ ← 𝒜.opening aux
-          pure ()) := by
-  change ((fun _ => ()) <$> ((simulateQ loggingOracle 𝒜.commit).run >>= fun x =>
-    𝒜.opening x.1.2 >>= fun q => pure ((x.1, x.2), q))) = _
-  simpa [map_bind, map_pure] using
-    loggingOracle.run_simulateQ_bind_fst 𝒜.commit
-    (fun (_, aux) => 𝒜.opening aux >>= fun _ => pure ())
-
-omit [DecidableEq Query] [DecidableEq Address] in
-private lemma verifyOpening_isTotalQueryBound_skeleton_depth
-    (model : NodeQueryModel Query Address Y) {s : Skeleton}
-    (addressKey : SkeletonInternalIndex s → Address)
-    (idx : SkeletonLeafIndex s) (leaf root : Y) (proof : List.Vector Y idx.depth) :
-    IsTotalQueryBound (verifyOpening model addressKey idx leaf root proof) s.depth := by
-  unfold verifyOpening
-  exact isTotalQueryBound_bind (n₁ := s.depth) (n₂ := 0)
-    (AddressedMerkleTree.isTotalQueryBound_getPutativeRootAddressedM_skeleton_depth
-      (fun position left right =>
-        liftM ((Query →ₒ Y).query (model.mkQuery (addressKey position) (left, right))))
-      idx leaf proof (fun _ _ _ => ⟨Nat.zero_lt_one, fun _ => trivial⟩))
-    fun _ => trivial
-
-omit [DecidableEq Query] in
 /--
 If the adversary `𝒜` has two-phase total query bound `qb`, then the full extractability
 game has total query bound `qb + s.depth`.
@@ -373,12 +366,12 @@ theorem extractabilityInner_isTotalQueryBound
 /-- The shared-cache random-oracle experiment makes at most as many underlying fresh
 queries as `extractabilityInner`. Cache hits skip the underlying query, so the implication
 is intentionally one-way. -/
-theorem extractabilityGame_isTotalQueryBound [IsUniformSpec (Query →ₒ Y)]
+theorem extractabilityExperiment_isTotalQueryBound [DecidableEq Query]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (qb : ℕ)
     (h : 𝒜.IsTwoPhaseTotalQueryBound qb) :
-    IsTotalQueryBound (extractabilityGame model addressKey 𝒜) (qb + s.depth) := by
+    IsTotalQueryBound (extractabilityExperiment model addressKey 𝒜) (qb + s.depth) := by
   apply (isQueryBound_map_iff _ _ (qb + s.depth) _ _).mpr
   exact IsTotalQueryBound.simulateQ_run_withCaching _
     (extractabilityInner_isTotalQueryBound model addressKey 𝒜 qb h)
@@ -387,7 +380,7 @@ theorem extractabilityGame_isTotalQueryBound [IsUniformSpec (Query →ₒ Y)]
 /-- Pointwise deterministic reduction for the cached suffix: once the commit cache is
 collision-free, a winning opening must add a fresh cache entry whose answer is one of the
 labels fixed by the logged commit. -/
-private lemma extractability_rest_win_implies_fresh_target_of_invariants
+private lemma extractability_rest_win_implies_fresh_target_of_invariants [DecidableEq Query]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s)
     {root : Y} {aux : 𝒜.AuxState} {log : (Query →ₒ Y).QueryLog}
@@ -430,8 +423,9 @@ private lemma extractability_rest_win_implies_fresh_target_of_invariants
 /-- Pointwise suffix bound in terms of the actual extracted-tree size and the residual
 opening budget. Its hypotheses are precisely the log/cache invariants maintained by the
 combined caching-and-logging interpreter used in the stopping-time proof below. -/
-private lemma extractability_rest_noCollision_le_of_opening_bound
-    [Finite Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+private lemma extractability_rest_noCollision_le_of_opening_bound [DecidableEq Query]
+    [Finite Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (openingBound targetBound : ℕ)
@@ -443,9 +437,9 @@ private lemma extractability_rest_noCollision_le_of_opening_bound
       ∃ entry ∈ log, entry.1 = input ∧ entry.2 = value)
     (htargets : (extractedTargets model s addressKey log root).toFinset.card ≤ targetBound)
     (hno : ¬ CacheHasCollision cacheCommit) :
-    Pr[fun z => OpeningExtractionFailure z.1 |
-      (simulateQ (Query →ₒ Y).cachingOracle
-        (extractabilityRest model addressKey 𝒜 root aux log)).run cacheCommit] ≤
+    Pr{let z ← (simulateQ (Query →ₒ Y).cachingOracle
+        (extractabilityRest model addressKey 𝒜 root aux log)).run
+          cacheCommit}[OpeningExtractionFailure z.1] ≤
       ((targetBound * (openingBound + s.depth) : ℕ) : ENNReal) *
         (Nat.card Y : ENNReal)⁻¹ := by
   let targets := (extractedTargets model s addressKey log root).toFinset
@@ -458,14 +452,14 @@ private lemma extractability_rest_noCollision_le_of_opening_bound
           (verifyOpening_isTotalQueryBound_skeleton_depth model addressKey idx leaf root proof)
           fun _ => trivial
   calc
-    Pr[fun z => OpeningExtractionFailure z.1 |
-        (simulateQ (Query →ₒ Y).cachingOracle
-          (extractabilityRest model addressKey 𝒜 root aux log)).run cacheCommit]
-      ≤ Pr[fun z => ∃ target ∈ targets, ∃ input : Query, ∃ value : Y,
-            z.2 input = some value ∧ cacheCommit input = none ∧ value = target |
-          (simulateQ (Query →ₒ Y).cachingOracle
-            (extractabilityRest model addressKey 𝒜 root aux log)).run cacheCommit] := by
-        apply probEvent_mono
+    Pr{let z ← (simulateQ (Query →ₒ Y).cachingOracle
+        (extractabilityRest model addressKey 𝒜 root aux log)).run
+          cacheCommit}[OpeningExtractionFailure z.1]
+      ≤ Pr{let z ← (simulateQ (Query →ₒ Y).cachingOracle
+            (extractabilityRest model addressKey 𝒜 root aux log)).run
+              cacheCommit}[∃ target ∈ targets, ∃ input : Query, ∃ value : Y,
+            z.2 input = some value ∧ cacheCommit input = none ∧ value = target] := by
+        refine prEvent_mono_of_support _ _ _ ?_
         intro z hz hwin
         obtain ⟨target, htarget, input, hfinal, hinitial⟩ :=
           extractability_rest_win_implies_fresh_target_of_invariants
@@ -474,7 +468,7 @@ private lemma extractability_rest_noCollision_le_of_opening_bound
           input, target, hfinal, hinitial, rfl⟩
     _ ≤ ((targets.card * (openingBound + s.depth) : ℕ) : ENNReal) *
           (Nat.card Y : ENNReal)⁻¹ := by
-        exact OracleComp.probEvent_cache_hits_targets_le_of_noCollision_homogeneous
+        exact OracleComp.prEvent_cache_hits_targets_le_of_noCollision_homogeneous
           (extractabilityRest model addressKey 𝒜 root aux log)
           (openingBound + s.depth) hrest targets cacheCommit hno
     _ ≤ ((targetBound * (openingBound + s.depth) : ℕ) : ENNReal) *
@@ -486,8 +480,9 @@ of the still-running commit computation. A cache hit consumes one unit of the re
 combined adversary budget; a miss additionally pays for the at most `cached` responses that
 would create a collision. When the commit stops, the suffix theorem pays for at most
 `targetCount * (remaining + depth)` fresh-target opportunities. -/
-private lemma extractabilityRunFrom_le_potential
-    [Finite Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+private lemma extractabilityRunFrom_le_potential [DecidableEq Query]
+    [Finite Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address) (𝒜 : Adversary Query Y s)
     (commit : OracleComp (Query →ₒ Y) (Y × 𝒜.AuxState))
@@ -501,12 +496,12 @@ private lemma extractabilityRunFrom_le_potential
     (hlogCache : ∀ entry ∈ log, cache entry.1 = some entry.2)
     (hcacheLog : ∀ input value, cache input = some value →
       ∃ entry ∈ log, entry.1 = input ∧ entry.2 = value) :
-    Pr[fun z => OpeningExtractionFailure z.1 |
-      extractabilityRunFrom model addressKey 𝒜 commit cache log] ≤
+    Pr{let z ← extractabilityRunFrom model addressKey 𝒜 commit cache
+           log}[OpeningExtractionFailure z.1] ≤
       (extractabilityExactPotential (2 * s.leafCount - 1) s.depth remaining cached : ENNReal) *
         (Nat.card Y : ENNReal)⁻¹ := by
   let targetCount := fun keyCount => min (2 * s.leafCount - 1) (2 * keyCount + 1)
-  have hgeneric := probEvent_adaptivePrefixRunFrom_le
+  have hgeneric := prEvent_adaptivePrefixRunFrom_le
     (suffix := fun x queryLog =>
       extractabilityRest model addressKey 𝒜 x.1 x.2 queryLog)
     (continuation := fun x => 𝒜.opening x.2 >>= fun _ => pure ())
@@ -548,18 +543,19 @@ private lemma extractabilityRunFrom_le_potential
     using hgeneric
 
 /-- Initialize the stopping-time induction at the empty cache and empty log, then transport
-the combined caching/logging semantics back to `extractabilityGame`. -/
-private lemma extractability_win_le_stopping_bound
-    [Finite Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+the combined caching/logging semantics back to `extractabilityExperiment`. -/
+private lemma extractability_win_le_stopping_bound [DecidableEq Query]
+    [Finite Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (qb : ℕ)
     (h : 𝒜.IsTwoPhaseTotalQueryBound qb) :
-    Pr[OpeningExtractionFailure | extractabilityGame model addressKey 𝒜] ≤
+    Pr{let z ← extractabilityExperiment model addressKey 𝒜}[OpeningExtractionFailure z] ≤
       (extractabilityExactPotential (2 * s.leafCount - 1) s.depth qb 0 : ENNReal) *
         (Nat.card Y : ENNReal)⁻¹ := by
-  have hmain : Pr[fun z => OpeningExtractionFailure z.1 |
-      extractabilityRunFrom model addressKey 𝒜 𝒜.commit ∅ []] ≤
+  have hmain : Pr{let z ← extractabilityRunFrom model addressKey 𝒜 𝒜.commit ∅
+                      []}[OpeningExtractionFailure z.1] ≤
       (extractabilityExactPotential (2 * s.leafCount - 1) s.depth qb 0 : ENNReal) *
         (Nat.card Y : ENNReal)⁻¹ := by
     apply extractabilityRunFrom_le_potential model addressKey 𝒜 𝒜.commit qb 0 h ∅ []
@@ -573,9 +569,9 @@ private lemma extractability_win_le_stopping_bound
   rw [extractabilityRunFrom, adaptivePrefixRunFrom,
     cachingLoggingOracle.run_simulateQ_eq_map_run_simulateQ_withQueryLog] at hmain
   simp only [List.nil_append] at hmain
-  rw [extractabilityGame, OracleSpec.withCacheOverlay, StateT.run'_eq,
+  rw [extractabilityExperiment, OracleSpec.withCacheOverlay, StateT.run'_eq,
     extractabilityInner_eq_commit_bind_rest model addressKey, simulateQ_bind, StateT.run_bind,
-    probEvent_map]
+    prEvent_map]
   simpa [Function.comp_def] using hmain
 
 /-- Unrelaxed stopping-time error numerator for Merkle extractability in the shared ROM.
@@ -595,13 +591,14 @@ single shared lazy random function is at most `extractabilityROMErrorNumerator s
 The finite maximum tracks fresh commit inputs rather than conditioning on a realized phase
 length. The proof is therefore valid when the adversary adaptively decides when to stop its
 commit phase and when it repeats cached queries. -/
-theorem extractability_rom_bound
-    [Fintype Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+theorem extractability_rom_bound [DecidableEq Query]
+    [Fintype Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (qb : ℕ)
     (h : 𝒜.IsTwoPhaseTotalQueryBound qb) :
-    Pr[OpeningExtractionFailure | extractabilityGame model addressKey 𝒜] ≤
+    Pr{let z ← extractabilityExperiment model addressKey 𝒜}[OpeningExtractionFailure z] ≤
       (extractabilityROMErrorNumerator s qb : ENNReal) *
         (Fintype.card Y : ENNReal)⁻¹ := by
   have hbound := extractability_win_le_stopping_bound model addressKey 𝒜 qb h
@@ -683,13 +680,14 @@ private lemma extractabilityROMErrorNumerator_le_coarse (s : Skeleton) (qb : ℕ
 
 /-- Unconditional two-endpoint relaxation of the unrelaxed finite maximum. This is the direct
 counterpart of the maximum appearing before the final case split in the source proof. -/
-theorem extractability_rom_bound_coarse
-    [Fintype Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+theorem extractability_rom_bound_coarse [DecidableEq Query]
+    [Fintype Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (qb : ℕ)
     (h : 𝒜.IsTwoPhaseTotalQueryBound qb) :
-    Pr[OpeningExtractionFailure | extractabilityGame model addressKey 𝒜] ≤
+    Pr{let z ← extractabilityExperiment model addressKey 𝒜}[OpeningExtractionFailure z] ≤
       ((max ((2 * s.leafCount - 1) * qb) (qb.choose 2) +
         (2 * s.leafCount - 1) * s.depth : ℕ) : ENNReal) *
         (Fintype.card Y : ENNReal)⁻¹ := by
@@ -698,14 +696,15 @@ theorem extractability_rom_bound_coarse
   exact_mod_cast extractabilityROMErrorNumerator_le_coarse s qb
 
 /-- Once `qb ≥ 2T + 1`, the birthday endpoint dominates the other coarse endpoint. -/
-theorem extractability_rom_bound_birthday_dominates
-    [Fintype Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+theorem extractability_rom_bound_birthday_dominates [DecidableEq Query]
+    [Fintype Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (qb : ℕ)
     (h : 𝒜.IsTwoPhaseTotalQueryBound qb)
     (hqb : 2 * (2 * s.leafCount - 1) + 1 ≤ qb) :
-    Pr[OpeningExtractionFailure | extractabilityGame model addressKey 𝒜] ≤
+    Pr{let z ← extractabilityExperiment model addressKey 𝒜}[OpeningExtractionFailure z] ≤
       ((qb.choose 2 + (2 * s.leafCount - 1) * s.depth : ℕ) : ENNReal) *
         (Fintype.card Y : ENNReal)⁻¹ := by
   let targetCount := 2 * s.leafCount - 1
@@ -721,15 +720,16 @@ theorem extractability_rom_bound_birthday_dominates
 /-- Textbook-shaped quadratic corollary. Besides birthday dominance, it suffices that
 `2·T·depth ≤ qb`; these two explicit conditions are weaker than the convenient single
 condition used in the Chiesa–Yogev presentation. -/
-theorem extractability_rom_bound_quadratic
-    [Fintype Y] [Inhabited Y] [IsUniformSpec (Query →ₒ Y)]
+theorem extractability_rom_bound_quadratic [DecidableEq Query]
+    [Fintype Y]
+    [UniformAnswerMeasure (Query →ₒ Y)]
     (model : NodeQueryModel Query Address Y) {s : Skeleton}
     (addressKey : SkeletonInternalIndex s → Address)
     (𝒜 : Adversary Query Y s) (qb : ℕ)
     (h : 𝒜.IsTwoPhaseTotalQueryBound qb)
     (hdominance : 2 * (2 * s.leafCount - 1) + 1 ≤ qb)
     (hdepth : 2 * (2 * s.leafCount - 1) * s.depth ≤ qb) :
-    Pr[OpeningExtractionFailure | extractabilityGame model addressKey 𝒜] ≤
+    Pr{let z ← extractabilityExperiment model addressKey 𝒜}[OpeningExtractionFailure z] ≤
       (qb : ENNReal) ^ 2 / (2 * Fintype.card Y) := by
   let targetCount := 2 * s.leafCount - 1
   let numerator := qb.choose 2 + targetCount * s.depth

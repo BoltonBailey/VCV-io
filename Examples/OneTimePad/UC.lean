@@ -11,6 +11,8 @@ public import VCVio.Interaction.UC.Computational
 public import PolyFun.Interaction.UC.OpenProcessModel
 public import VCVio.Interaction.UC.Runtime
 public import VCVio.OracleComp.Constructions.BitVec
+public import VCVio.EvalDist.ProbabilityNotation
+public import VCVio.EvalDist.Monad.Option
 
 /-!
 # One-Time Pad at the UC Observation Layer
@@ -53,9 +55,8 @@ We model the two views at the **observation layer**:
   the canonical simulator, which replaces the OTP ciphertext with a
   fresh uniform sample.
 
-The discrete lemma `evalSPMF_realCipherObserve_eq` proves the finite OTP argument. The bundled
-observation layer crosses the explicit compatibility bridge once and exposes equal
-`Measure Unit` denotations for every plaintext `msg` and Boolean predicate `P`.
+The measure lemma `evalDist_realCipherObserve_eq` proves the finite OTP argument and exposes
+equal `Measure Unit` denotations for every plaintext `msg` and Boolean predicate `P`.
 
 ## How the observation lifts into `Interaction.UC.Semantics`
 
@@ -145,11 +146,11 @@ noncomputable abbrev T :=
 a uniform key `k : BitVec sp`, compute the ciphertext `c := k ⊕ msg`,
 and `guard` that the distinguisher's predicate `P` holds at `c`.
 
-The `OptionT ProbComp` target lets `guard` contribute genuine failure
-mass to the resulting `SPMF Unit`. -/
+The `OptionT ProbComp` target lets `guard` discard unsuccessful mass from the resulting measure.
+-/
 noncomputable def realCipherObserve (sp : ℕ) (msg : BitVec sp)
     (P : BitVec sp → Bool) : OptionT ProbComp Unit := do
-  let k ← ($ᵗ BitVec sp : OptionT ProbComp (BitVec sp))
+  let k ← $ᵗ BitVec sp
   guard (P (k ^^^ msg) = true)
 
 /-- **Ideal-world observation** (environment's view under the canonical
@@ -161,104 +162,48 @@ No plaintext input is required: OTP privacy is what lets the
 simulator reproduce this distribution without reading `msg`. -/
 noncomputable def idealCipherObserve (sp : ℕ) (P : BitVec sp → Bool) :
     OptionT ProbComp Unit := do
-  let c ← ($ᵗ BitVec sp : OptionT ProbComp (BitVec sp))
+  let c ← $ᵗ BitVec sp
   guard (P c = true)
-
-/-- Local copy of the `OracleComp`-internal lemma relating `Pr[= ()]` on
-a `bind` with a `guard` to a `probEvent`. Kept private here to avoid
-exposing internals of `VCVio.OracleComp.EvalDist`. -/
-private lemma probOutput_liftM_bind_guard
-    {α : Type} (oa : ProbComp α) (p : α → Prop) [DecidablePred p] :
-    Pr[= () | (do let a ← (liftM oa : OptionT ProbComp α)
-                  guard (p a) : OptionT ProbComp Unit)] = Pr[ p | oa] := by
-  rw [probOutput_bind_eq_tsum]
-  simp only [OptionT.probOutput_liftM, probOutput_guard]
-  rw [probEvent_eq_tsum_ite]
-  congr 1; ext a
-  split_ifs <;> simp
-
-/-! ### Success probabilities -/
-
-/-- **Real-world success probability**:
-`#{ k : P (k ⊕ msg) = true } / |BitVec sp|`. -/
-theorem probOutput_realCipherObserve (sp : ℕ) (msg : BitVec sp)
-    (P : BitVec sp → Bool) :
-    Pr[= () | realCipherObserve sp msg P] =
-      (Finset.univ.filter fun k : BitVec sp => P (k ^^^ msg) = true).card /
-        (Fintype.card (BitVec sp) : ℝ≥0∞) := by
-  change Pr[= () | (do
-      let k ← (liftM ($ᵗ BitVec sp) : OptionT ProbComp (BitVec sp))
-      guard (P (k ^^^ msg) = true) : OptionT ProbComp Unit)] = _
-  rw [probOutput_liftM_bind_guard ($ᵗ BitVec sp) (fun k => P (k ^^^ msg) = true),
-      probEvent_uniformSample]
-
-/-- **Ideal-world success probability**:
-`#{ c : P c = true } / |BitVec sp|`. -/
-theorem probOutput_idealCipherObserve (sp : ℕ) (P : BitVec sp → Bool) :
-    Pr[= () | idealCipherObserve sp P] =
-      (Finset.univ.filter fun c : BitVec sp => P c = true).card /
-        (Fintype.card (BitVec sp) : ℝ≥0∞) := by
-  change Pr[= () | (do
-      let c ← (liftM ($ᵗ BitVec sp) : OptionT ProbComp (BitVec sp))
-      guard (P c = true) : OptionT ProbComp Unit)] = _
-  rw [probOutput_liftM_bind_guard ($ᵗ BitVec sp) (fun c => P c = true),
-      probEvent_uniformSample]
-
-/-- **Real-world failure mass** is positive when `P` is not universally
-true on `BitVec sp`: specifically, `1 -` (the real-world success
-probability). Mirrors the ideal failure formula modulo the
-bijection `k ↦ k ⊕ msg`, which is why the two agree as `SPMF`s. -/
-theorem probFailure_realCipherObserve (sp : ℕ) (msg : BitVec sp)
-    (P : BitVec sp → Bool) :
-    Pr[⊥ | realCipherObserve sp msg P] =
-      1 - (Finset.univ.filter fun k : BitVec sp => P (k ^^^ msg) = true).card /
-        (Fintype.card (BitVec sp) : ℝ≥0∞) := by
-  rw [probFailure_eq_sub_tsum,
-      tsum_eq_single () (fun x hx => absurd (Subsingleton.elim x ()) hx),
-      probOutput_realCipherObserve]
-
-/-- **Ideal-world failure mass**: `1 -` (ideal success probability). -/
-theorem probFailure_idealCipherObserve (sp : ℕ) (P : BitVec sp → Bool) :
-    Pr[⊥ | idealCipherObserve sp P] =
-      1 - (Finset.univ.filter fun c : BitVec sp => P c = true).card /
-        (Fintype.card (BitVec sp) : ℝ≥0∞) := by
-  rw [probFailure_eq_sub_tsum,
-      tsum_eq_single () (fun x hx => absurd (Subsingleton.elim x ()) hx),
-      probOutput_idealCipherObserve]
 
 /-! ### OTP perfect secrecy at the observation layer -/
 
 /-- **OTP perfect secrecy (observation form).** For every plaintext
 `msg` and every Boolean predicate `P`, the real-world and ideal-world
-observations have identical `SPMF Unit` denotations.
+observations have identical successful-output measures.
 
-The proof reduces to showing that the `k ↦ k ⊕ msg` bijection
-preserves the cardinality of the success filter, which is the
-familiar "XOR with a uniform key is uniform" fact in disguise. -/
-theorem evalSPMF_realCipherObserve_eq (sp : ℕ) (msg : BitVec sp)
+XOR with a uniform key has the uniform ciphertext measure, and the guard applies the same
+observable event to both ciphertext distributions. -/
+theorem evalDist_realCipherObserve_eq (sp : ℕ) (msg : BitVec sp)
     (P : BitVec sp → Bool) :
-    𝒮[realCipherObserve sp msg P] =
-      𝒮[idealCipherObserve sp P] := by
-  apply SPMF.ext
-  intro x
-  have hx : x = () := Subsingleton.elim _ _
-  subst x
-  rw [← probOutput_def, ← probOutput_def]
-  rw [probOutput_realCipherObserve, probOutput_idealCipherObserve]
-  congr 2
-  refine Finset.card_bij' (fun k _ => k ^^^ msg) (fun c _ => c ^^^ msg)
-    ?_ ?_ ?_ ?_
-  · intro k hk
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hk ⊢
-    exact hk
-  · intro c hc
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hc ⊢
-    rwa [show (c ^^^ msg ^^^ msg : BitVec sp) = c by
-      rw [BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]]
-  · intro k _
-    rw [BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]
-  · intro c _
-    rw [BitVec.xor_assoc, BitVec.xor_self, BitVec.xor_zero]
+    𝒟[realCipherObserve sp msg P] =
+      𝒟[idealCipherObserve sp P] := by
+  simp only [realCipherObserve, idealCipherObserve, OptionT.evalDist_liftM_bind_guard]
+  congr 1
+  rw [← prEvent_map ($ᵗ BitVec sp : ProbComp _) (fun k ↦ k ^^^ msg) (fun c ↦ P c = true),
+    prEvent_eq_evalDist_of_discrete, prEvent_eq_evalDist_of_discrete,
+    evalDist_xor_uniformSample, SampleableType.evalDist_bitVec]
+
+/-! ### Success probabilities -/
+
+/-- **Real-world success probability**: the generalized probability notation reads the OTP
+success event `#{ k : P (k ⊕ msg) = true } / |BitVec sp|` directly from the successful-output
+measure. -/
+theorem probability_realCipherObserve (sp : ℕ) (msg : BitVec sp)
+    (P : BitVec sp → Bool) :
+    Pr{let x ← realCipherObserve sp msg P}[x = ()] =
+      (Finset.univ.filter fun k : BitVec sp => P (k ^^^ msg) = true).card /
+        (Fintype.card (BitVec sp) : ℝ≥0∞) := by
+  rw [prEvent_eq_evalDist_singleton, realCipherObserve, OptionT.evalDist_liftM_bind_guard]
+  simp
+
+/-- A uniform ideal-world ciphertext satisfies the observation predicate with its accepted
+fraction of outputs. -/
+theorem probability_idealCipherObserve (sp : ℕ) (P : BitVec sp → Bool) :
+    Pr{let x ← idealCipherObserve sp P}[x = ()] =
+      (Finset.univ.filter fun c : BitVec sp ↦ P c = true).card /
+        (Fintype.card (BitVec sp) : ℝ≥0∞) := by
+  rw [prEvent_eq_evalDist_singleton, idealCipherObserve, OptionT.evalDist_liftM_bind_guard]
+  simp
 
 /-! ## Concrete closed processes carrying a plaintext -/
 
@@ -307,7 +252,7 @@ distinguisher predicate `P`. Models the environment's view under
 `π_OTP`.
 
 The `run` field depends on the closed-system argument through
-`readMsg`; OTP privacy collapses the resulting `SPMF Unit`
+`readMsg`; OTP privacy collapses the resulting `Measure Unit`
 denotations into the plaintext-independent ideal one. -/
 noncomputable def realSmcSemantics (sp : ℕ)
     (readMsg : MsgReader sp) (P : BitVec sp → Bool) :
@@ -316,7 +261,7 @@ noncomputable def realSmcSemantics (sp : ℕ)
   instMeasurableSpace := inferInstance
   m := OptionT ProbComp
   instMonad := inferInstance
-  sem := MeasureSemanticsVia.ofEvalDistSemantics (OptionT ProbComp)
+  sem := SemanticsVia.ofEvalDistSemantics (OptionT ProbComp)
   run := fun W => realCipherObserve sp (readMsg W) P
 
 /-- **Ideal SMC semantics.** Ignore the closed system beyond sampling
@@ -330,7 +275,7 @@ noncomputable def idealSmcSemantics (sp : ℕ) (P : BitVec sp → Bool) :
   instMeasurableSpace := inferInstance
   m := OptionT ProbComp
   instMonad := inferInstance
-  sem := MeasureSemanticsVia.ofEvalDistSemantics (OptionT ProbComp)
+  sem := SemanticsVia.ofEvalDistSemantics (OptionT ProbComp)
   run := fun _ => idealCipherObserve sp P
 
 @[simp]
@@ -347,21 +292,21 @@ theorem idealSmcSemantics_run (sp : ℕ) (P : BitVec sp → Bool)
 /-- **OTP UC indistinguishability at every closed system.** For every
 plug-plaintext reader `readMsg` and every distinguisher predicate `P`,
 the real SMC semantics and the ideal SMC semantics produce identical
-`SPMF Unit` denotations on every closed system.
+`Measure Unit` denotations on every closed system.
 
-This is the transport of `evalSPMF_realCipherObserve_eq` through the
+This applies `evalDist_realCipherObserve_eq` through the
 bundling layer. Concretely: pick any closed system, read its
 plaintext, encrypt it under a uniform key, and apply the
-distinguisher; the resulting `SPMF Unit` is independent of the
+distinguisher; the resulting `Measure Unit` is independent of the
 plaintext, hence matches the ideal simulation that never needed the
 plaintext in the first place. -/
 theorem realSmcSemantics_eq_idealSmcSemantics (sp : ℕ)
     (readMsg : MsgReader sp) (P : BitVec sp → Bool) (W : T.Closed) :
     (realSmcSemantics sp readMsg P).evalDist W =
       (idealSmcSemantics sp P).evalDist W := by
-  change (𝒮[realCipherObserve sp (readMsg W) P]).toMeasure =
-      (𝒮[idealCipherObserve sp P]).toMeasure
-  exact congrArg SPMF.toMeasure (evalSPMF_realCipherObserve_eq sp (readMsg W) P)
+  change 𝒟[realCipherObserve sp (readMsg W) P] =
+      𝒟[idealCipherObserve sp P]
+  exact evalDist_realCipherObserve_eq sp (readMsg W) P
 
 /-! ## `ObservedCompEmulates 0` via observation-layer OTP privacy -/
 
@@ -370,7 +315,7 @@ any two closed systems at any boundary are indistinguishable with
 advantage zero, for every choice of plaintext reader and
 distinguisher predicate.
 
-The real-semantics-view of `close W_real K` is an `SPMF Unit` that
+The real-semantics-view of `close W_real K` is a `Measure Unit` that
 depends on `readMsg (close W_real K)` and `P`; by OTP privacy, this
 is the same as the ideal-semantics view, which depends only on `P`
 and is the same for `W_real` and `W_ideal`. Hence the two
@@ -384,15 +329,10 @@ theorem observedCompEmulates_realSmcSemantics (sp : ℕ)
   have hreal :
       (realSmcSemantics sp readMsg P).evalDist (T.close W_real K) =
         (realSmcSemantics sp readMsg P).evalDist (T.close W_ideal K) := by
-    change (𝒮[realCipherObserve sp (readMsg (T.close W_real K)) P]).toMeasure =
-      (𝒮[realCipherObserve sp (readMsg (T.close W_ideal K)) P]).toMeasure
-    exact congrArg SPMF.toMeasure
-      ((evalSPMF_realCipherObserve_eq sp (readMsg (T.close W_real K)) P).trans
-        (evalSPMF_realCipherObserve_eq sp (readMsg (T.close W_ideal K)) P).symm)
-  change Semantics.distAdvantage _ _ _ ≤ (0 : ℝ)
+    exact (realSmcSemantics_eq_idealSmcSemantics sp readMsg P (T.close W_real K)).trans
+      (realSmcSemantics_eq_idealSmcSemantics sp readMsg P (T.close W_ideal K)).symm
   unfold Semantics.distAdvantage
-  rw [hreal]
-  simp [MeasureTheory.Measure.tvDist_self]
+  rw [hreal, MeasureTheory.Measure.etvDist_self]
 
 /-! ## Concrete instantiation: two structurally distinct closed systems -/
 
@@ -414,8 +354,8 @@ theorem observedCompEmulates_msgClosed (sp : ℕ) (readMsg : MsgReader sp)
 produces distinct `OptionT ProbComp Unit` computations on
 `msgClosed sp msg₀` and `msgClosed sp msg₁`, namely
 `realCipherObserve sp msg₀ P` and `realCipherObserve sp msg₁ P`.
-OTP privacy (`evalSPMF_realCipherObserve_eq`) is what equates their
-`SPMF Unit` denotations despite the distinct `run` values. -/
+OTP privacy (`evalDist_realCipherObserve_eq`) equates their successful-output measures
+despite the distinct `run` values. -/
 theorem realSmcSemantics_run_distinct
     (sp : ℕ) (P : BitVec sp → Bool) (msg₀ msg₁ : BitVec sp)
     (h : msg₀ ≠ msg₁) :
@@ -431,11 +371,11 @@ theorem realSmcSemantics_run_distinct
   · change realCipherObserve sp
       (if msgClosed sp msg₀ = msgClosed sp msg₀ then msg₀ else msg₁) P =
       realCipherObserve sp msg₀ P
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
   · change realCipherObserve sp
       (if msgClosed sp msg₁ = msgClosed sp msg₀ then msg₀ else msg₁) P =
       realCipherObserve sp msg₁ P
-    rw [if_neg hne.symm]
+    rw [ite_eq_right hne.symm]
 
 /-! ## Open-world layer: three-port boundary `Δ_otp` -/
 
@@ -578,8 +518,8 @@ The plaintext input is never consulted: the simulator is realised
 directly by the emission.
 
 Distributional equivalence with `realOtp` is a theorem, not a
-structural identity: OTP privacy (`evalSPMF_realCipherObserve_eq`)
-collapses the two bundled `SPMF Unit` observations. -/
+structural identity: OTP privacy (`evalDist_realCipherObserve_eq`)
+collapses the two bundled `Measure Unit` observations. -/
 noncomputable abbrev idealOtp (sp : ℕ) :
     Interaction.UC.OpenProcess (OptionT ProbComp) Party (Δ_otp sp) where
   Proc := Unit
@@ -603,7 +543,7 @@ theorem realOtp_boundaryTrace (sp : ℕ) (msg k : BitVec sp) :
   change Interaction.UC.OpenNodeContext.boundaryTrace (otpTree sp)
     (otpDecoration sp (realEmit sp msg)) ⟨k, ⟨⟩⟩ = _
   rw [Interaction.UC.OpenNodeContext.boundaryTrace_node]
-  simp only [otpDecoration, otpOpenNode, realEmit, id_eq,
+  simp only [otpDecoration, otpOpenNode, realEmit,
     Interaction.UC.OpenNodeContext.boundaryTrace_done]
   exact mul_one _
 
@@ -618,7 +558,7 @@ theorem idealOtp_boundaryTrace (sp : ℕ) (c : BitVec sp) :
   change Interaction.UC.OpenNodeContext.boundaryTrace (otpTree sp)
     (otpDecoration sp (idealEmit sp)) ⟨c, ⟨⟩⟩ = _
   rw [Interaction.UC.OpenNodeContext.boundaryTrace_node]
-  simp only [otpDecoration, otpOpenNode, idealEmit, id_eq,
+  simp only [otpDecoration, otpOpenNode, idealEmit,
     Interaction.UC.OpenNodeContext.boundaryTrace_done]
   exact mul_one _
 
@@ -666,8 +606,8 @@ ideal OTP open processes at the three-port boundary `Δ_otp sp` are
 Since `observedCompEmulates_realSmcSemantics` quantifies over every pair of
 open processes at every boundary, this follows directly. The content
 lives one level down: OTP privacy
-(`evalSPMF_realCipherObserve_eq`) collapses the real and ideal
-bundled observations into the same `SPMF Unit`, regardless of what
+(`evalDist_realCipherObserve_eq`) collapses the real and ideal
+bundled observations into the same `Measure Unit`, regardless of what
 open-world object is plugged into the closed system. -/
 theorem observedCompEmulates_realOtp (sp : ℕ) (msg : BitVec sp)
     (readMsg : MsgReader sp) (P : BitVec sp → Bool) :

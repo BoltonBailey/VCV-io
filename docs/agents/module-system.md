@@ -35,7 +35,7 @@ VCVio owns cryptographic specialization:
 
 - `OracleSpec`, `OracleQuery`, `OracleComp`, `QueryImpl`, and established
   oracle notation;
-- PMF/SPMF and support semantics, probability lemmas, uniform-oracle policy,
+- measure and support semantics, probability lemmas, uniform-oracle policy,
   query accounting, and program logic;
 - cryptographic games, reductions, and examples; and
 - compatibility names that keep existing oracle-facing developments stable.
@@ -47,11 +47,13 @@ VCVio names. `OracleComp spec` remains definitionally the free monad on
 of the generic handler operations.
 
 Probability semantics are PFunctor-parametric but remain in VCVio: PolyFun is
-domain-independent and should not acquire VCVio's PMF/SPMF policy. The
-`OracleSpec.IsProbabilitySpec` name is a definitional façade over
-`PFunctor.IsProbabilitySpec`; the stronger oracle uniformity bundle keeps its
-existing finite/inhabited oracle instances and has an explicit
-`IsUniformSpec.toPFunctor` conversion.
+domain-independent and should not acquire VCVio's measure policy. The
+`OracleSpec.AnswerMeasure` name is a definitional abbreviation of
+`PFunctor.AnswerMeasure` on `spec.toPFunctor` with the discrete σ-algebra on
+answers. `OracleSpec.UniformAnswerMeasure` extends it with the law that each chosen
+measure is uniform; it carries no finite or inhabited data, and oracle-level uniform
+interpretations are explicit (`UniformAnswerMeasure.ofFiniteNonempty`) rather
+than derived from finiteness.
 
 Do not add a conversion instance whose target is headed by the reducible
 expression `spec.toPFunctor`. Such an instance can unify with unrelated
@@ -87,6 +89,36 @@ laws are constructor equations, application lemmas, extensionality lemmas,
 and characterization `…_iff` theorems. Mark a definition `@[expose]` only when
 downstream definitional equality is an intentional part of the API and a
 theorem would materially obstruct ordinary use.
+
+In Lean 4.34 a theorem written with syntactic `:= rfl` requests automatic
+definitional-equality registration. For an exported theorem, that registration
+requires the unfolded definitions to be exposed. An ordinary theorem proof
+such as `:= by unfold operation; rfl` can instead prove a public propositional
+equation while keeping `operation` opaque to importers. Choose which contract
+the consumer needs before adding exposure; exported theorem proofs alone do
+not require exposing their implementation dependencies. Exercise the equation
+through an ordinary import after narrowing the boundary.
+
+The [API-boundary campaign ledger](../reading/api-boundary-campaign.md) records
+consumer evidence, intentional reducers, instance leaks, and upstream blockers.
+
+The definitional identities among the semantic definitions (`evalDist`,
+`PFunctor.FreeM.denote`, `prEvent`, `support`) are an implementation
+detail of `VCVio/EvalDist/**` and `VCVio/OracleComp/**`. Proofs inside those
+directories may close by `rfl` across them; everywhere else
+(`CryptoFoundations/`, `Examples/`, `LatticeCrypto/`, `HashSig/`, the tests)
+crosses the boundary through the public equation lemmas
+(`PFunctor.FreeM.evalDist_eq_denote`, `prEvent_def`, `PFunctor.FreeM.support_eq_liftM_univ`),
+so the semantics can be re-implemented without touching downstream proofs.
+Existing downstream `rfl` uses are grandfathered rather than a precedent; a
+review may ask a new one to go through the equation lemma.
+
+`@[reducible]` stays on the type-level constructors (`OracleComp`,
+`OracleSpec.toPFunctor`, `ofFn`, `unifSpec`, `ProbComp`, `QueryImpl`): their
+instance discrimination keys depend on it. It is not a substitute for
+`@[expose]` on a value-level definition, and a value-level definition that is
+reducible only so that a downstream `rfl` works is a sign that the equation
+lemma is missing.
 
 ### Visibility and transparency are separate
 
@@ -151,6 +183,18 @@ dependent recursor directly, or marking the smallest intentional wrapper with
 the appropriate reducibility attribute. Do not globally change the status of
 core eliminators, disable the transparency check, or use `import all` as a
 substitute.
+
+The repository's own instance of the last option is
+`attribute [implicit_reducible] OracleSpec` in `VCVio/OracleComp/OracleSpec.lean`:
+the one-field wrapper `ι → Type v` has to unfold when a dependent type or an
+instance-implicit argument is checked at `.implicit`, and the comment on the
+attribute names the library proofs that fail without it. It is not there for
+instance synthesis, which finds the semantics instances at the erased
+`PFunctor.mk` literal on its own (`VCVioTest/PFunctorFacade.lean` checks
+this). The `attribute [local implicit_reducible]` lines on `PFunctor.Idx`,
+`PFunctor.sigma`, `PFunctor.FreeM.bind`, and `FreeMonoid` in individual files
+are the same device applied where a single proof needs it; each one was checked
+to be load-bearing before being kept.
 
 Use `#guard_msgs` only when the test is meant to preserve an expected
 diagnostic; do not wrap a passing regression canary with it.
@@ -242,6 +286,17 @@ application, composition, or extensionality law, or add that law at the owning
 module boundary. Constructor equations and definitions whose reduction is an
 intentional documented API may still use `rfl` directly.
 
+## The program-logic import boundary
+
+Unary carrier interpretations live in `VCVio/ProgramLogic/Unary/WP/` and consume core's
+`Std.Internal.Do` API through PolyFun's algebra bridge. Relational carrier interpretations
+live in `VCVio/ProgramLogic/Relational/WP/` and use VCVio's coupling interface. Carrier
+instances are scoped, so importing either layer does not choose a global semantics.
+
+The `Std.Do` handler bridge and the lattice-generic core WP API coexist.
+See [program-logic.md](program-logic.md#core-wp-and-the-symbolic-rewriter-boundary) for
+selection, tactic boundaries, and the v4.35 tracking links.
+
 ## Restoring `private` correctly
 
 The module migration changed the meaning of `private`: a public exposed body
@@ -269,13 +324,36 @@ in review; restore all other helpers using the patterns above.
 
 ## Validation and coordinated rollout
 
-The boundary has three canaries:
+The boundary has three canaries and one ratchet:
 
 - `scripts/check-polyfun-boundary.sh` rejects cross-package private imports;
 - `VCVioTest/PFunctorFacade.lean` exercises the direct PFunctor API and the
-  OracleSpec compatibility API; and
+  OracleSpec compatibility API;
 - the downstream scratch-consumer CI job imports the generic semantics and
-  checks the public handler operations.
+  checks the public handler operations; and
+- `scripts/check-expose-boundary.sh` holds the per-library count of files
+  that open a broad `@[expose] public section` at or below
+  `scripts/expose_boundary_baseline.tsv` (fixtures in
+  `scripts/test-expose-boundary.sh`; `--report` prints the delta against the
+  PR base). The lexical counter handles whitespace and section modifiers,
+  ignores comments and literals, and counts each file once. It does not
+  elaborate macros. Run `scripts/check-expose-boundary.sh --update-baseline`
+  in the PR that converts a file so the ceiling follows the decrease; raise
+  it only with a stated reason in the PR description.
+
+Start a conversion by switching to plain `public section` and building. The
+compiler identifies definitions that existing public declarations need exposed
+under "may need to be `@[expose]`d". Then review the intended downstream API:
+repository callers may exercise only some parameter sets. In particular,
+bundles with concrete type fields must expose those projections when callers
+need to supply ordinary values of those types. Add public-import canaries for
+such interfaces, including every exported specialization.
+
+Proof modules often need only a few selectively exposed definitions. Fixtures
+whose public proofs intentionally unfold nearly every definition may retain
+`@[expose] public section`; explain that need in the module docstring when it
+is not apparent from the contents. Runtime execution alone (including `main`)
+does not require exposing definition bodies to proof reduction.
 
 Changes that add PolyFun API and consume it from VCVio require two coordinated
 repository changes:

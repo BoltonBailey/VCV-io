@@ -18,7 +18,7 @@ through `PMF`, `Classical.decEq`, or `Fintype.ofFinite`), this file fails to com
 
 The dividing line this file locks is: *programs* (`OracleComp` values, `QueryImpl` handlers,
 `StateT`/`WriterT` simulators, `ProbComp` runs) are computable, while *semantics*
-(`evalSPMF`, `Pr[⋯]`, `SPMF`, expected costs) remain noncomputable. Executability lets
+(`𝒟[⋯]`, `Pr{⋯}[⋯]`, expected costs) remain noncomputable. Executability lets
 library users smoke-test security reductions by actually running them via
 `OracleComp.runIO`, turning "efficient by inspection" into inspection plus execution.
 
@@ -26,7 +26,7 @@ No `#eval` is used: outputs are random, so any runtime assertion would be flaky.
 is compilation itself.
 -/
 
-@[expose] public section
+public section
 
 open OracleComp OracleSpec
 
@@ -34,15 +34,14 @@ namespace VCVioTest.Computability
 
 /-! ## Lazy random-oracle simulation pipeline
 
-Locks `unifFwdImpl`, `randomOracle`, and their sum: the standard interpretation of a
+Locks `OracleSpec.romImpl` (`unifFwdImpl` plus `randomOracle`): the standard interpretation of a
 `unifSpec + hashSpec` computation into `StateT QueryCache ProbComp`. -/
 
 /-- The lazy-RO simulation pipeline used throughout the Fiat-Shamir and Fischlin layers. -/
 def roSimPipeline :
     QueryImpl (unifSpec + (ℕ →ₒ Bool))
       (StateT ((ℕ →ₒ Bool) : OracleSpec ℕ).QueryCache ProbComp) :=
-  unifFwdImpl (ℕ →ₒ Bool) +
-    (randomOracle : QueryImpl ((ℕ →ₒ Bool) : OracleSpec ℕ) _)
+  (ℕ →ₒ Bool).romImpl
 
 /-- A toy random-oracle computation: query two hash points and combine the answers. -/
 def roToy : OracleComp (unifSpec + (ℕ →ₒ Bool)) Bool := do
@@ -66,14 +65,14 @@ def roMixedFixed (f : QueryImpl ((ℕ →ₒ Bool) : OracleSpec ℕ) Id) : ProbC
 
 /-- API canary for the probability-one bridge on a computation containing both query kinds. -/
 example (p : Bool → Prop) :
-    Pr[fun v => p v.1 | (simulateQ roSimPipeline roMixedToy).run
-      (∅ : ((ℕ →ₒ Bool) : OracleSpec ℕ).QueryCache)] = 1
+    Pr{let v ← (simulateQ roSimPipeline roMixedToy).run
+          (∅ : ((ℕ →ₒ Bool) : OracleSpec ℕ).QueryCache)}[p v.1] = 1
     ↔
     ∀ f : QueryImpl ((ℕ →ₒ Bool) : OracleSpec ℕ) Id,
       (∅ : ((ℕ →ₒ Bool) : OracleSpec ℕ).QueryCache).AgreesWithFn f →
-        Pr[p | roMixedFixed f] = 1 := by
+        Pr{let x ← roMixedFixed f}[p x] = 1 := by
   simpa only [roSimPipeline, roMixedFixed] using
-    (OracleComp.probEvent_eq_one_simulateQ_unifFwdImpl_add_randomOracle_run_iff
+    (OracleComp.prEvent_eq_one_simulateQ_romImpl_run_iff
       (oa := roMixedToy) (preexisting_cache :=
         (∅ : ((ℕ →ₒ Bool) : OracleSpec ℕ).QueryCache)) p)
 
@@ -118,7 +117,7 @@ outer interpreter through a stateful or logging handler. -/
 /-- A stateful handler over `ProbComp` that records each sampled answer. -/
 def toyTrackingInner : QueryImpl (Unit →ₒ Bool) (StateT (List Bool) ProbComp) :=
   fun (_ : Unit) => do
-    let b ← liftM ($ᵗ Bool)
+    let b ← $ᵗ Bool
     modifyGet fun log => (b, b :: log)
 
 /-- `toyTrackingInner` with its base `ProbComp` mapped through the identity forwarder. -/

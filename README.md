@@ -5,8 +5,8 @@ protocols, and implementations. The core framework provides:
 
 * A monadic syntax for representing computations with oracle access (`OracleComp`), with probabilistic computations (`ProbComp`) as a special case of having uniform selection oracles.
 * A measure-valued denotational semantics (`evalDist` / `𝒟[…]`) for probabilistic computations,
-  with an explicit finite adapter (`evalSPMF` / `𝒮[…]`) and scalar tools for output, event, and
-  failure probabilities (`probOutput`/`probEvent`/`probFailure`).
+  with event probabilities `Pr{let x ← comp}[p x]`, equality in distribution `mx =ᵈ my`, and total
+  variation distance.
 * An operational semantics (`simulateQ`) for implementing/simulating the behavior of a computation's oracles, including implementations of random oracles, query logging, reductions, etc.
 * A program logic with relational (pRHL-style) and unary (Hoare-style) proof modes, with interactive tactics for stepping through game-based proofs.
 
@@ -24,10 +24,17 @@ Assuming Lean and Lake are already installed, the project can be built by just r
 lake exe cache get && lake build
 ```
 
+`lake build` covers the seven proof libraries. `./scripts/validate.sh` runs the fast per-PR
+checks locally; add `--lint`, `--test`, or `--axioms` for those CI passes. `lake test` builds the
+test libraries and runs the test executables, and `lake lint` runs source-style and environment checks
+(see `AGENTS.md`, *Building*).
+
 CI's timed build covers the non-test Lean libraries `ToMathlib`, `VCVio`,
 `LatticeCrypto`, `Extern`, `HashSig`, `Examples`, and `VCVioWidgets`.
-The build timing report parses per-file timings for that same set.
-Test libraries and test executables are intentionally outside the timed build; CI
+CI starts from the newest cached build, so Lake rebuilds only the modules a change invalidated;
+a nightly run builds from scratch. The build timing report compares each rebuilt module, including
+test-library modules that `lake test` rebuilt, against its last recorded time (see `AGENTS.md`).
+Test libraries and test executables are outside the timed build; CI
 only times the smoke module separately with `lake env lean VCVioTest/Smoke.lean`.
 
 VCVio can also be used as a dependency in another Lake project via a
@@ -37,8 +44,8 @@ for dependencies, so the corresponding `extern_lib` targets fall back to empty
 stub archives when those sources are absent. Downstream executables still link
 unless they call VCVio's native FFI symbols; to enable the real backends, run
 `git submodule update --init --recursive` inside `.lake/packages/VCVio` and
-rebuild. (In this repository itself the same command at the repo root — or
-`scripts/build-project.sh --ffi` — enables the native test executables.)
+rebuild. (In this repository itself the same command at the repo root enables the
+native test executables, which `lake test -- --ffi` then builds and runs.)
 
 Mathematical foundations such as probability theory, computational complexity, and algebraic structures are based on or written to the Mathlib project (see [MATHLIB4](REFERENCES.md#mathlib4)), making all of that library usable in constructions and proofs.
 
@@ -54,7 +61,10 @@ infrastructure and some tooling and automation remain under active development.
 - `VCVio/` contains the oracle-computation framework, probability semantics, program logic, and generic crypto abstractions.
 - `LatticeCrypto/` contains lattice algebra, hardness assumptions, ML-DSA, ML-KEM, Falcon, and their concrete implementations.
 - `Extern/` contains the native FFI surface: the `@[extern]` bindings and the FFI-backed concrete instances. Its `extern_lib`s build as empty stubs when the `third_party/` submodules are absent.
-- `HashSig/` contains hash-based signatures, including proof-level specifications and security for SLH-DSA.
+- `HashSig/` contains hash-based signatures: proof-level specifications, component-level FIPS 205
+  conformance results, and security-facing interfaces for SLH-DSA. Neither an unforgeability
+  theorem nor a complete FIPS conformance result is proved yet; see
+  `docs/design/slh-dsa-status-and-roadmap.md`.
 - `LatticeCryptoTest/` contains ACVP vectors, regression tests, and differential checks against native backends.
 - `HashSigTest/` contains hash-signature test and validation modules.
 - `Examples/` contains compact framework proofs including OneTimePad, ElGamal, and Schnorr.
@@ -120,20 +130,22 @@ This provides a mechanism to implement oracle behaviors, but can also be used to
 
 ## Probabilities of Outputs and Events
 
-Semantics for probability calculations come from using `simulateQ` to interpret the computation in another monad.
-`support` can be used to embed in the `Set` monad to get the possible outputs of a computation.
+`support` gives the possible outputs of a computation as a `Set`, with no probabilistic
+interpretation.
 
-`evalDist` exposes the successful-output law as a Mathlib `Measure`; missing mass represents
-failure or nontermination. `evalSPMF` is the explicit `OptionT PMF` compatibility and executable
-backend. For `ProbComp` (i.e. `OracleComp unifSpec`), `evalSPMF` is definitionally equal to
-`simulateQ` with uniform implementations.
+`evalDist` (notation `𝒟[comp]`) exposes the successful-output law as a Mathlib `Measure`; missing
+mass represents failure or nontermination. On `OracleComp spec` it composes the answer measures
+chosen by `[OracleSpec.AnswerMeasure spec]`; `ProbComp` (i.e. `OracleComp unifSpec`) answers each
+query uniformly.
 We introduce notation:
 
-* `Pr[= x | comp]` - probability of output `x`
-* `Pr[p | comp]` - probability of event `p`
-* `Pr[⊥ | comp]` - probability of the computation failing
+* `Pr{let y ← comp}[y = x]` - probability of output `x`
+* `Pr{let x ← comp}[p x]` - probability of event `p`
+* `prFail comp` - probability of the computation failing
+* `mx =ᵈ my` - equality in distribution
 
-The typeclass `NeverFail mx` asserts that `Pr[⊥ | mx] = 0`, and is used to propagate non-failure guarantees through monadic combinators.
+A computation is lossless when `IsProbabilityMeasure 𝒟[mx]`; bind preserves losslessness when
+its continuation is lossless almost everywhere.
 
 ## Automatic Coercions
 
@@ -157,7 +169,7 @@ The library includes a program logic (`VCVio.ProgramLogic`) inspired by pRHL and
 
 Predicates and tools for computations:
 
-* `allWhen`/`someWhen` - recursively check predicates on a computation's syntax tree given allowed query outputs
+* `reachableWhen` - the outputs a computation can reach when each query may return only an allowed set of answers
 * `IsQueryBound` - bound the number of queries a computation makes (with per-index variant `IsPerIndexQueryBound`)
 * `QueryImpl.withLogging`/`withCaching`/`withPregen` - modifiers that wrap a query implementation with logging, caching, or pre-generated answers
 

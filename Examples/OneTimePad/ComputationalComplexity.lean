@@ -8,19 +8,18 @@ module
 
 public import ToMathlib.MeasureTheory.DiscreteInstances
 public import ToMathlib.Probability.UniformOn
-public import ToMathlib.General
 public import Examples.OneTimePad.Basic
 public import VCVio.CryptoFoundations.Asymptotics.PathSemantics
 public import VCVio.CryptoFoundations.SymmEncAlg.Measure
 public import Mathlib.Data.LawfulXor.Equiv
 
 /-!
-# A measure-native fair-coin one-time pad
+# A fair-coin one-time pad under measure semantics
 
 This file is an end-to-end feasibility test for the computational-complexity stack. The key
 sampler is fully syntactic `OracleComp coinSpec` code with exactly one oracle interaction per key
-bit. Its semantics is selected independently by `fairCoinMeasureSpec`, which assigns the native
-uniform Mathlib measure to every coin answer.
+bit. Its semantics is selected independently by `fairCoinAnswerMeasure`, which assigns the uniform
+Mathlib measure to every coin answer.
 
 The proof deliberately establishes equalities of whole measures. Independent draws are related
 to Mathlib's product measure, finite uniformity is transported through explicit bijections, and
@@ -45,15 +44,15 @@ namespace oneTimePad
 
 /-! ## Explicit fair-bit sampling -/
 
-/-- Native fair-coin measure semantics for the polynomial interface underlying `coinSpec`.
+/-- Fair-coin measure semantics for the polynomial interface underlying `coinSpec`.
 
 This is an explicit semantic choice rather than an instance inferred from finiteness. Callers may
-replace it with another `IsMeasureSpec` when studying a biased or otherwise concrete source. -/
+replace it with another `AnswerMeasure` when studying a biased or otherwise concrete source. -/
 @[instance_reducible]
-noncomputable def fairCoinMeasureSpec : coinSpec.toPFunctor.IsMeasureSpec :=
-  PFunctor.IsMeasureSpec.uniformOfFintypeInhabited _
+noncomputable def fairCoinAnswerMeasure : coinSpec.toPFunctor.AnswerMeasure :=
+  PFunctor.AnswerMeasure.uniformOfFiniteNonempty _
 
-attribute [local instance] fairCoinMeasureSpec
+attribute [local instance] fairCoinAnswerMeasure
 
 /-- One syntactic query to the fair-coin interface. -/
 def fairCoin : OracleComp coinSpec Bool :=
@@ -70,7 +69,6 @@ def bitVecOfFnLE {n : ℕ} (bits : Fin n → Bool) : BitVec n :=
   (BitVec.ofBoolListLE (List.ofFn bits)).cast List.length_ofFn
 
 /-- Reading a coordinate after little-endian packing recovers that coordinate. -/
-@[simp]
 theorem bitVecOfFnLE_getLsb {n : ℕ} (bits : Fin n → Bool) (index : Fin n) :
     (bitVecOfFnLE bits).getLsb index = bits index := by
   unfold bitVecOfFnLE
@@ -170,7 +168,7 @@ theorem expectedQueryCount_coinBitVec_eq (n : ℕ) :
 
 /-! ## Uniform measure semantics -/
 
-/-- One fair-coin query denotes the native uniform measure on `Bool`. -/
+/-- One fair-coin query denotes the uniform measure on `Bool`. -/
 @[simp]
 theorem denote_fairCoin :
     PFunctor.FreeM.denote fairCoin.toFreeM = uniformOn (Set.univ : Set Bool) := by
@@ -261,6 +259,21 @@ theorem denote_coinBitVec_eq_uniform (n : ℕ) :
   exact map_uniformOn_univ_of_bijective Measurable.of_discrete
     (bitVecOfFnLE_bijective n)
 
+/-- The primary measure semantics of the explicit key generator is the uniform measure: the
+`𝒟[…]` reading of `denote_coinBitVec_eq_uniform`. -/
+theorem evalDist_coinBitVec (n : ℕ) :
+    𝒟[coinBitVec n] = uniformOn (Set.univ : Set (BitVec n)) :=
+  denote_coinBitVec_eq_uniform n
+
+/-- Every key is drawn with probability `(2 ^ n)⁻¹`. -/
+theorem evalDist_coinBitVec_apply_singleton (n : ℕ) (key : BitVec n) :
+    𝒟[coinBitVec n] {key} = (2 ^ n : ℝ≥0∞)⁻¹ := by
+  simp [evalDist_coinBitVec]
+
+/-- The explicit key generator never fails: its denotation carries total mass one. -/
+theorem evalDist_coinBitVec_apply_univ (n : ℕ) : 𝒟[coinBitVec n] Set.univ = 1 := by
+  simp [evalDist_coinBitVec]
+
 /-! ## A measure-level one-time pad -/
 
 /-- The one-time pad whose key sampler uses one explicit coin query per key bit. -/
@@ -269,12 +282,12 @@ def coinOneTimePad (sp : ℕ) :
   oneTimePadOfKeygen sp (coinBitVec sp)
 
 /-- Encryption followed by decryption has the Dirac law at the original message. -/
-theorem coinOneTimePad_measureComplete (sp : ℕ) :
-    (coinOneTimePad sp).measureComplete ProbabilitySemantics.freeM := by
+theorem coinOneTimePad_completeWith (sp : ℕ) :
+    (coinOneTimePad sp).completeWith ProbabilitySemantics.freeM := by
   intro message
-  have hprogram : (coinOneTimePad sp).CompleteExp message =
+  have hprogram : (coinOneTimePad sp).completenessExperiment message =
       PFunctor.FreeM.map (fun _ : BitVec sp ↦ some message) (coinBitVec sp).toFreeM := by
-    simp [SymmEncAlg.CompleteExp, coinOneTimePad, monad_norm]
+    simp [SymmEncAlg.completenessExperiment, coinOneTimePad, monad_norm]
   rw [hprogram]
   change PFunctor.FreeM.denote
     (PFunctor.FreeM.map (fun _ : BitVec sp ↦ some message) (coinBitVec sp).toFreeM) = _
@@ -287,12 +300,12 @@ theorem coinOneTimePad_measureComplete (sp : ℕ) :
 theorem denote_coinOneTimePad_cipherGivenMsg_eq_uniform
     (sp : ℕ) (message : BitVec sp) :
     PFunctor.FreeM.denote
-        ((coinOneTimePad sp).PerfectSecrecyCipherGivenMsgExp message).toFreeM =
+        ((coinOneTimePad sp).perfectSecrecyCipherGivenMsgExperiment message).toFreeM =
       uniformOn (Set.univ : Set (BitVec sp)) := by
-  have hprogram : (coinOneTimePad sp).PerfectSecrecyCipherGivenMsgExp message =
+  have hprogram : (coinOneTimePad sp).perfectSecrecyCipherGivenMsgExperiment message =
       PFunctor.FreeM.map (fun key : BitVec sp ↦ key ^^^ message)
         (coinBitVec sp).toFreeM := by
-    simp [SymmEncAlg.PerfectSecrecyCipherGivenMsgExp, coinOneTimePad, monad_norm]
+    simp [SymmEncAlg.perfectSecrecyCipherGivenMsgExperiment, coinOneTimePad, monad_norm]
   rw [hprogram]
   change PFunctor.FreeM.denote
     (PFunctor.FreeM.map (fun key : BitVec sp ↦ key ^^^ message)
@@ -303,9 +316,9 @@ theorem denote_coinOneTimePad_cipherGivenMsg_eq_uniform
     (xor_left_involutive message).bijective
 
 /-- The explicit-coin one-time pad is perfectly secret in measure semantics. -/
-theorem coinOneTimePad_measurePerfectSecrecyAt (sp : ℕ) :
-    (coinOneTimePad sp).measurePerfectSecrecyAt ProbabilitySemantics.freeM :=
-  (coinOneTimePad sp).measurePerfectSecrecyAt_of_constant ProbabilitySemantics.freeM
+theorem coinOneTimePad_ciphertextRowsEqualWith (sp : ℕ) :
+    (coinOneTimePad sp).ciphertextRowsEqualWith ProbabilitySemantics.freeM :=
+  (coinOneTimePad sp).ciphertextRowsEqualWith_of_constant ProbabilitySemantics.freeM
     (uniformOn (Set.univ : Set (BitVec sp)))
     (denote_coinOneTimePad_cipherGivenMsg_eq_uniform sp)
 

@@ -49,7 +49,7 @@ What this file adds is the `OracleSpec`-side reading of that theory:
 * `OracleMachine.implements_iff_behavior_eq` — implementation = behavior equality.
 * `DynComputation.ImplementsWithin.simulateQ_run_eq` — implementing machines compute the
   program under any lawful `QueryImpl`.
-* `DynComputation.ImplementsWithin.probOutput_none_runWithInput` — no probability mass on
+* `DynComputation.ImplementsWithin.prEvent_none_runWithInput` — no probability mass on
   fuel exhaustion under a probabilistic handler.
 -/
 
@@ -109,59 +109,11 @@ abbrev toMachine {α β : Type u} (program : α → OracleComp spec β) :
   DynComputation.ofFreeM program
 
 /-- Every program family is implemented by its residual-program machine. -/
-@[simp] theorem toMachine_implements {α β : Type u} (program : α → OracleComp spec β) :
+theorem toMachine_implements {α β : Type u} (program : α → OracleComp spec β) :
     (toMachine program).Implements program :=
   DynComputation.implements_ofFreeM program
 
 end OracleComp
-
-namespace PFunctor.DynSystem.DynComputation
-
-/- Interface transport commutes with fuelled unrolling. Stated at the generic
-`DynComputation` level; an upstream candidate for `DynComputation/Bounded`. -/
-section UnrollWrap
-
-universe u' uA uB uA₂ uB₂ uα uβ
-
-variable {p : PFunctor.{uA, uB}} {q : PFunctor.{uA₂, uB₂}} {α : Type uα} {β : Type uβ}
-
-/-- Fuelled unrolling commutes with interface transport along a lens: the unrolled
-query tree of the wrapped machine is the lens-translated unrolled tree. The syntactic
-(`FreeM`-level) content of interface wrapping, from which handler-level wrapping laws
-follow by `FreeM.liftM` naturality without touching machine states. -/
-theorem unroll_wrap (M : DynComputation.{u'} p α β) (w : PFunctor.Lens p q)
-    (k : ℕ) (s : M.State) :
-    (M.wrap w).unroll k s = PFunctor.FreeM.mapLens w (M.unroll k s) := by
-  induction k generalizing s with
-  | zero =>
-    cases hview : M.view s with
-    | inl b =>
-      rw [M.unroll_return 0 s b hview,
-        (M.wrap w).unroll_return 0 s b (by simp [hview])]
-      rfl
-    | inr qq =>
-      obtain ⟨t, next⟩ := qq
-      rw [M.unroll_query_zero s t next hview,
-        (M.wrap w).unroll_query_zero s (w.toFunA t)
-          (fun d => next (w.toFunB t d)) (by simp [hview])]
-      rfl
-  | succ k ih =>
-    cases hview : M.view s with
-    | inl b =>
-      rw [M.unroll_return (k + 1) s b hview,
-        (M.wrap w).unroll_return (k + 1) s b (by simp [hview])]
-      rfl
-    | inr qq =>
-      obtain ⟨t, next⟩ := qq
-      rw [M.unroll_query_succ k s t next hview,
-        (M.wrap w).unroll_query_succ k s (w.toFunA t)
-          (fun d => next (w.toFunB t d)) (by simp [hview])]
-      exact congrArg (PFunctor.FreeM.liftBind (w.toFunA t))
-        (funext fun d => ih (next (w.toFunB t d)))
-
-end UnrollWrap
-
-end PFunctor.DynSystem.DynComputation
 
 namespace PFunctor.DynSystem.DynComputation.ImplementsWithin
 
@@ -192,11 +144,11 @@ theorem runWithInput_ofFn_eq {M : OracleMachine spec α β}
 
 /-- Probabilistic reading: an implementing machine puts no probability mass on fuel
 exhaustion — the `none` branch of the fuelled run through a probabilistic handler is null. -/
-theorem probOutput_none_runWithInput {M : OracleMachine spec α β}
-    {program : α → OracleComp spec β} {k : ℕ}
+theorem prEvent_none_runWithInput {ι : Type} {spec : OracleSpec.{0, 0} ι} {α β : Type}
+    {M : OracleMachine spec α β} {program : α → OracleComp spec β} {k : ℕ}
     (h : M.ImplementsWithin program k) (impl : ProbHandler spec) (x : α) :
-    Pr[= none | M.runWithInput impl k x] = 0 := by
+    Pr{let y ← M.runWithInput impl k x}[y = none] = 0 := by
   rw [h.simulateQ_run_eq impl x]
-  exact probOutput_some_map_none _
+  simp [prEvent_norm]
 
 end PFunctor.DynSystem.DynComputation.ImplementsWithin

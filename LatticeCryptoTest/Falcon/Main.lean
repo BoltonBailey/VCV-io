@@ -7,6 +7,7 @@ Authors: Quang Dao
 module
 public import LatticeCryptoTest.Falcon.Helpers
 public import LatticeCryptoTest.Falcon.TestVectors
+public import LatticeCryptoTest.Falcon.KeyGenDiff
 
 /-!
 # Falcon Test Runner
@@ -27,26 +28,24 @@ lake build falcon_test
 
 public section
 
-set_option maxRecDepth 2048
-
 open Falcon Falcon.Concrete Falcon.Concrete.FPR Falcon.Concrete.SamplerZ
      Falcon.Concrete.FFTOps Falcon.Concrete.Sign Falcon.Test
 
-def testFalcon512 : Params where
+private def testFalcon512 : Params where
   n := 512
   sigma := 0
   sigmaMin := 0
   betaSquared := 34034726
   sbytelen := 625
 
-def testFalcon1024 : Params where
+private def testFalcon1024 : Params where
   n := 1024
   sigma := 0
   sigmaMin := 0
   betaSquared := 70265242
   sbytelen := 1239
 
-def u64ToHex (v : UInt64) : String := Id.run do
+private def u64ToHex (v : UInt64) : String := Id.run do
   let mut s := ""
   for i in [0:16] do
     let nibble := ((v >>> ((15 - i) * 4).toUInt64) &&& 0xF).toNat
@@ -55,12 +54,12 @@ def u64ToHex (v : UInt64) : String := Id.run do
     s := s.push digit
   return s
 
-def checkFPR (st : IO.Ref TestState) (name : String)
+private def checkFPR (st : IO.Ref TestState) (name : String)
     (got expected : FPR) : IO Unit :=
   check st name (got == expected)
     s!"got=0x{u64ToHex got} exp=0x{u64ToHex expected}"
 
-def flush : IO Unit := IO.getStdout >>= IO.FS.Stream.flush
+private def flush : IO Unit := IO.getStdout >>= IO.FS.Stream.flush
 
 /-- Generate a 40-byte salt (nonce) from the PRNG state.
 
@@ -69,7 +68,7 @@ Diagnostic-only helper: the production signer derives its salts from
 `LatticeCrypto/Falcon/Concrete/Sign.lean`), which is why this definition was
 removed from the library; the target-vector diagnostic below only needs a
 deterministic salt drawn from a `PRNGState`. -/
-def prngNextSalt (s : PRNGState) : Bytes 40 × PRNGState := Id.run do
+private def prngNextSalt (s : PRNGState) : Bytes 40 × PRNGState := Id.run do
   let mut st := s
   let mut bytes : Array UInt8 := Array.mkEmpty 40
   for _ in [0:40] do
@@ -641,28 +640,49 @@ def runFalconLowLevelTests (st : IO.Ref TestState) : IO Unit := do
   -- ── 26. FXR basic ops ───────────────────────────
   IO.println "26. FXR basic arithmetic (32.32 fixed-point)"
   do
-    let one := Falcon.Concrete.FXR.fxr_of 1
-    let two := Falcon.Concrete.FXR.fxr_of 2
-    let three := Falcon.Concrete.FXR.fxr_of 3
-    let six := Falcon.Concrete.FXR.fxr_of 6
+    let one := Falcon.Concrete.FXR.fxrOf 1
+    let two := Falcon.Concrete.FXR.fxrOf 2
+    let three := Falcon.Concrete.FXR.fxrOf 3
+    let six := Falcon.Concrete.FXR.fxrOf 6
     check st "fxr_of(1) = 1<<32"
       (one == ((1 : UInt64) <<< 32))
     check st "fxr_add(1, 2) = 3"
-      (Falcon.Concrete.FXR.fxr_add one two == three)
+      (Falcon.Concrete.FXR.fxrAdd one two == three)
     check st "fxr_sub(3, 1) = 2"
-      (Falcon.Concrete.FXR.fxr_sub three one == two)
+      (Falcon.Concrete.FXR.fxrSub three one == two)
     check st "fxr_mul(2, 3) = 6"
-      (Falcon.Concrete.FXR.fxr_mul two three == six)
+      (Falcon.Concrete.FXR.fxrMul two three == six)
     check st "fxr_div(6, 3) = 2"
-      (Falcon.Concrete.FXR.fxr_div six three == two)
+      (Falcon.Concrete.FXR.fxrDiv six three == two)
     check st "fxr_neg(1) + 1 = 0"
-      (Falcon.Concrete.FXR.fxr_add (Falcon.Concrete.FXR.fxr_neg one) one == 0)
+      (Falcon.Concrete.FXR.fxrAdd (Falcon.Concrete.FXR.fxrNeg one) one == 0)
     check st "fxr_round(1) = 1"
-      (Falcon.Concrete.FXR.fxr_round one == (1 : Int32))
+      (Falcon.Concrete.FXR.fxrRound one == (1 : Int32))
     check st "fxr_double(1) = 2"
-      (Falcon.Concrete.FXR.fxr_double one == two)
+      (Falcon.Concrete.FXR.fxrDouble one == two)
     check st "fxr_half(2) = 1"
-      (Falcon.Concrete.FXR.fxr_half two == one)
+      (Falcon.Concrete.FXR.fxrHalf two == one)
+    -- Signed operands: `fxrMul` and `fxrSqr` are the floor of the exact product in 32.32
+    -- units, as in the reference (`int128` product shifted right by 32).
+    let exactMul (x y : UInt64) : UInt64 :=
+      (Int64.ofInt ((x.toInt64.toInt * y.toInt64.toInt) >>> 32)).toUInt64
+    check st "fxr_mul(-1.0, 0.5) = -0.5"
+      (Falcon.Concrete.FXR.fxrMul 0xFFFFFFFF00000000 0x80000000 == 0xFFFFFFFF80000000)
+    check st "fxr_mul(0.5, -1.0) = -0.5"
+      (Falcon.Concrete.FXR.fxrMul 0x80000000 0xFFFFFFFF00000000 == 0xFFFFFFFF80000000)
+    check st "fxr_sqr(-1.25) = 1.5625"
+      (Falcon.Concrete.FXR.fxrSqr 0xFFFFFFFEC0000000 == 0x190000000)
+    let signedVals : List UInt64 :=
+      [0xFFFFFFFC40000000, 0xFFFFFFFEC0000000, 0xFFFFFFFF00000000, 0xFFFFFFFF80000000, 0,
+        0x80000000, 0x100000000, 0x140000000, 0x280000000, 0x7FFFFFFF00000000]
+    let mut mulOk := true
+    let mut sqrOk := true
+    for x in signedVals do
+      sqrOk := sqrOk && (Falcon.Concrete.FXR.fxrSqr x == exactMul x x)
+      for y in signedVals do
+        mulOk := mulOk && (Falcon.Concrete.FXR.fxrMul x y == exactMul x y)
+    check st "fxr_mul = floor(x·y / 2^32) on a signed grid" mulOk
+    check st "fxr_sqr = floor(x² / 2^32) on a signed grid" sqrOk
   IO.println ""
   flush
   -- ── 27. Diagnostic: target vector & NTRU relation check ──────────
@@ -827,6 +847,7 @@ def main : IO Unit := do
   runFalconFloatingPointTests st
   runFalconLowLevelTests st
   runFalconSigningTests st
+  Falcon.Test.KeyGenDiff.runFalconKeyGenDiffTests st
   -- ── Summary ────────────────────────────────────
   let s ← st.get
   IO.println s!"=== {s.passed} passed, {s.failed} failed ==="

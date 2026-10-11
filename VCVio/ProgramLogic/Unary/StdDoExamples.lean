@@ -24,7 +24,7 @@ set_option mvcgen.warning false
 namespace OracleComp.ProgramLogic.StdDo
 
 variable {ι : Type u} {spec : OracleSpec ι}
-variable [IsUniformSpec spec]
+variable [OracleSpec.UniformAnswerMeasure spec]
 variable {α : Type}
 
 example (x : α) :
@@ -40,7 +40,7 @@ example (t : spec.Domain) {Q : Std.Do.PostCond (spec.Range t) .pure} :
   mspec
 
 example (oa : OracleComp spec α) (p : α → Prop) :
-    wpProp (spec := spec) oa p ↔ Pr[ p | oa] = 1 :=
-  wpProp_iff_probEvent_eq_one (spec := spec) oa p
+    wpProp (spec := spec) oa p ↔ Pr{let x ← oa}[p x] = 1 :=
+  wpProp_iff_prEvent_eq_one (spec := spec) oa p
 
 end OracleComp.ProgramLogic.StdDo

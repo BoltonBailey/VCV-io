@@ -5,10 +5,12 @@ Authors: Devon Tuma
 -/
 
 module
-public import VCVio.OracleComp.EvalDist
+public import VCVio.OracleComp.EvalDist.Measure
+public import VCVio.OracleComp.Constructions.SampleableType.Measure
 public import VCVio.OracleComp.SimSemantics.SimulateQ
-public import VCVio.OracleComp.Coercions.SubSpec
-public import VCVio.OracleComp.QueryTracking.LoggingOracle
+public import VCVio.OracleComp.Coercions.SubSpec.Basic
+public import VCVio.OracleComp.Coercions.SubSpec.Measure
+public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import PolyFun.PFunctor.Dynamical.Behavior
 public import PolyFun.PFunctor.Dynamical.Run
 public import PolyFun.PFunctor.Free.Path
@@ -103,34 +105,29 @@ instance : Coe (OracleHandler spec) (QueryImpl spec Id) := ⟨toQueryImpl⟩
 
 end OracleHandler
 
-/-- A **randomized** oracle for `spec`: a `QueryImpl` valued in `SPMF = OptionT PMF`, i.e. each
-query answered by a sub-probability distribution. This is the Kleisli-category section that closes
-a strategy into a Markov chain on its states (`OracleStrategy.kleisliStep`). Single-universe because
-`SPMF : Type u → Type u`. -/
-abbrev ProbHandler {ι : Type u} (spec : OracleSpec.{u, u} ι) : Type u := QueryImpl spec SPMF
+/-- A **randomized** oracle for `spec`: a `QueryImpl` valued in `ProbComp`, each query answered by
+a probabilistic program whose distribution is read through `𝒟`. This is the Kleisli-category
+section that closes a strategy into a Markov chain on its states (`OracleStrategy.kleisliStep`).
+It lives in `Type` because the measure semantics of `ProbComp` does. -/
+abbrev ProbHandler {ι : Type} (spec : OracleSpec.{0, 0} ι) : Type := QueryImpl spec ProbComp
 
 namespace OracleSpec
 
-/-- The canonical randomized oracle of a probability spec: answer each query by its
-`IsProbabilitySpec` distribution, lifted to `SPMF`. Specializes to a fair coin on
-`coinSpec` and to uniform selection on `unifSpec`. -/
-noncomputable def probHandler {ι : Type} (spec : OracleSpec.{0, 0} ι)
-    [IsProbabilitySpec spec] : ProbHandler spec :=
-  fun t => (IsProbabilitySpec.toPMF t : SPMF (spec.Range t))
+/-- The canonical randomized oracle of a specification with sampleable answers: answer each query
+by uniform sampling. Specializes to a fair coin on `coinSpec` and to uniform selection on
+`unifSpec`. -/
+noncomputable def uniformHandler {ι : Type} (spec : OracleSpec.{0, 0} ι)
+    [∀ t, SampleableType (spec.Range t)] : ProbHandler spec :=
+  uniformSampleImpl
 
 open OracleComp in
-/-- Running a program against the canonical probabilistic handler computes its
-distributional semantics: machine-level game values against `probHandler` are `Pr[…]`
-statements about the program. -/
-theorem simulateQ_probHandler {ι : Type} {spec : OracleSpec.{0, 0} ι}
-    [IsProbabilitySpec spec] {α : Type} (oa : OracleComp spec α) :
-    simulateQ spec.probHandler oa = 𝒟[oa] := by
-  induction oa using OracleComp.inductionOn with
-  | pure x => simp
-  | query_bind t k ih =>
-    rw [simulateQ_query_bind]
-    simp only [ih, evalDist_bind, evalDist_liftM_toPMF]
-    simp [OracleSpec.probHandler, ← PMF.monad_map_eq_map]
+/-- Running a program against the canonical randomized oracle of a uniform specification preserves
+its distribution: machine-level game values against `uniformHandler` are statements about the
+program itself. -/
+theorem simulateQ_uniformHandler {ι : Type} {spec : OracleSpec.{0, 0} ι}
+    [∀ t, SampleableType (spec.Range t)] [UniformAnswerMeasure spec] {α : Type}
+    (oa : OracleComp spec α) : simulateQ spec.uniformHandler oa =ᵈ oa :=
+  uniformSampleImpl.evalDistEq_simulateQ oa
 
 end OracleSpec
 
@@ -258,38 +255,38 @@ queries. The deterministic run embeds as the Dirac special case (`ofHandler`). -
 
 section Probabilistic
 
-variable {spec : OracleSpec.{u, u} ι} {S : Type u}
+variable {ι : Type} {spec : OracleSpec.{0, 0} ι} {S : Type}
 
 /-- One probabilistic step: sample an answer to the exposed query from the handler, then advance the
-state. The result is a sub-distribution over next states. -/
+state. The result is a probabilistic program over next states. -/
 noncomputable def kleisliStep (H : ProbHandler spec) (A : OracleStrategy S spec) (s : S) :
-    SPMF S :=
+    ProbComp S :=
   (fun r => A.update s r) <$> H (A.expose s)
 
-/-- The `n`-fold Kleisli iterate of `kleisliStep`: the sub-distribution over states reached after
-`n` adaptive queries, starting from `s`. -/
+/-- The `n`-fold Kleisli iterate of `kleisliStep`: the probabilistic program over states reached
+after `n` adaptive queries, starting from `s`. -/
 noncomputable def kleisliIterate (H : ProbHandler spec) (A : OracleStrategy S spec) :
-    ℕ → S → SPMF S
+    ℕ → S → ProbComp S
   | 0, s => pure s
   | n + 1, s => kleisliStep H A s >>= kleisliIterate H A n
 
-/-- The joint sub-distribution over the length-`n` transcript and the final state. -/
+/-- The joint run over the length-`n` transcript and the final state. -/
 noncomputable def kleisliTranscript (H : ProbHandler spec) (A : OracleStrategy S spec) :
-    S → ℕ → SPMF (QueryLog spec × S)
+    S → ℕ → ProbComp (QueryLog spec × S)
   | s, 0 => pure ([], s)
   | s, n + 1 => do
       let r ← H (A.expose s)
       let p ← kleisliTranscript H A (A.update s r) n
       pure (⟨A.expose s, r⟩ :: p.1, p.2)
 
-/-- The sub-distribution over length-`n` transcripts of the randomized run from `s`. -/
+/-- The length-`n` transcripts of the randomized run from `s`. -/
 noncomputable def transcriptDist (H : ProbHandler spec) (A : OracleStrategy S spec) (s : S)
-    (n : ℕ) : SPMF (QueryLog spec) :=
+    (n : ℕ) : ProbComp (QueryLog spec) :=
   Prod.fst <$> kleisliTranscript H A s n
 
 /-- A deterministic handler as a Dirac `ProbHandler`. -/
 noncomputable def _root_.ProbHandler.ofHandler (h : OracleHandler spec) : ProbHandler spec :=
-  fun t => (pure (h t) : SPMF (spec.Range t))
+  fun t => (pure (h t) : ProbComp (spec.Range t))
 
 @[simp] theorem kleisliStep_ofHandler (h : OracleHandler spec) (A : OracleStrategy S spec)
     (s : S) : kleisliStep (ProbHandler.ofHandler h) A s = pure (advanceOnce h A s) := by
@@ -342,7 +339,7 @@ def advance (h : OracleHandler spec) (oa : OracleComp spec α) : OracleComp spec
 @[simp] theorem advance_pure (h : OracleHandler spec) (x : α) :
     advance h (pure x : OracleComp spec α) = pure x := rfl
 
-@[simp] theorem advance_queryBind (h : OracleHandler spec) (t : spec.Domain)
+theorem advance_queryBind (h : OracleHandler spec) (t : spec.Domain)
     (k : spec.Range t → OracleComp spec α) : advance h (queryBind t k) = k (h t) := rfl
 
 /-- The number of handler-answered query steps until the program halts. -/
@@ -352,11 +349,11 @@ def stepsToHalt (h : OracleHandler spec) (oa : OracleComp spec α) : ℕ :=
 @[simp] theorem stepsToHalt_pure (h : OracleHandler spec) (x : α) :
     stepsToHalt h (pure x : OracleComp spec α) = 0 := rfl
 
-@[simp] theorem stepsToHalt_queryBind (h : OracleHandler spec) (t : spec.Domain)
+theorem stepsToHalt_queryBind (h : OracleHandler spec) (t : spec.Domain)
     (k : spec.Range t → OracleComp spec α) :
     stepsToHalt h (queryBind t k) = stepsToHalt h (k (h t)) + 1 := rfl
 
-@[simp] theorem evalWithAnswerFn_queryBind (f : QueryImpl spec Id) (t : spec.Domain)
+theorem evalWithAnswerFn_queryBind (f : QueryImpl spec Id) (t : spec.Domain)
     (k : spec.Range t → OracleComp spec α) :
     evalWithAnswerFn f (queryBind t k) = evalWithAnswerFn f (k (f t)) := by
   change simulateQ f (queryBind t k) = simulateQ f (k (f t))
@@ -421,23 +418,24 @@ namespace OracleComp
 
 section Probabilistic
 
-variable {spec : OracleSpec.{u, u} ι} {α : Type u}
+variable {ι : Type} {spec : OracleSpec.{0, 0} ι} {α : Type}
 
 /-- One randomized coalgebra step on programs: sample the head query's answer from `H`, exposing the
 continuation; a `pure` is already the answer. -/
 noncomputable def advanceK (H : ProbHandler spec) (oa : OracleComp spec α) :
-    SPMF (OracleComp spec α) :=
+    ProbComp (OracleComp spec α) :=
   oa.casesOn (fun x => pure (pure x)) (fun t k => k <$> H t)
 
 @[simp] theorem advanceK_pure (H : ProbHandler spec) (x : α) :
     advanceK H (pure x : OracleComp spec α) = pure (pure x) := rfl
 
-@[simp] theorem advanceK_queryBind (H : ProbHandler spec) (t : spec.Domain)
+theorem advanceK_queryBind (H : ProbHandler spec) (t : spec.Domain)
     (k : spec.Range t → OracleComp spec α) : advanceK H (queryBind t k) = k <$> H t := rfl
 
-/-- **Probabilistic headline.** The `SPMF` semantics of a program is one randomized coalgebra step
-followed by the semantics of the continuation — `simulateQ` unfolds coalgebraically. With the Dirac
-bridge (`transcriptDist_ofHandler`) this specializes to the deterministic correspondence. -/
+/-- **Probabilistic headline.** Running a program against a randomized oracle is one randomized
+coalgebra step followed by the run of the continuation — `simulateQ` unfolds coalgebraically.
+With the Dirac bridge (`transcriptDist_ofHandler`) this specializes to the deterministic
+correspondence. -/
 theorem simulateQ_eq_advanceK_bind (H : ProbHandler spec) (oa : OracleComp spec α) :
     simulateQ H oa = advanceK H oa >>= simulateQ H := by
   cases oa with
@@ -468,7 +466,7 @@ def transcript (h : OracleHandler spec) (oa : OracleComp spec α) : QueryLog spe
 @[simp] theorem transcript_pure (h : OracleHandler spec) (x : α) :
     transcript h (pure x : OracleComp spec α) = [] := rfl
 
-@[simp] theorem transcript_queryBind (h : OracleHandler spec) (t : spec.Domain)
+theorem transcript_queryBind (h : OracleHandler spec) (t : spec.Domain)
     (k : spec.Range t → OracleComp spec α) :
     transcript h (queryBind t k) = ⟨t, h t⟩ :: transcript h (k (h t)) := rfl
 
@@ -486,7 +484,7 @@ a program that makes at most `n` queries has a transcript of length at most `n`.
   | queryBind t k ih =>
       simp only [transcript_queryBind, List.length_cons, stepsToHalt_queryBind, ih]
 
-@[simp] theorem transcript_countQ_pure (h : OracleHandler spec) (p : ι → Prop) [DecidablePred p]
+theorem transcript_countQ_pure (h : OracleHandler spec) (p : ι → Prop) [DecidablePred p]
     (x : α) : (transcript h (pure x : OracleComp spec α)).countQ p = 0 := rfl
 
 /-- `countQ` recurrence on the transcript: a query to `t` contributes one iff `p t`. -/
@@ -621,9 +619,9 @@ theorem transcript_countQ_le_of_isQueryBoundP (h : OracleHandler spec) (p : ι �
       rw [transcript_countQ_queryBind]
       by_cases hpt : p t
       · have hn : 0 < n := hp.resolve_left (not_not_intro hpt)
-        simp only [hpt, if_true] at hle ⊢
+        simp only [hpt, ite_true] at hle ⊢
         omega
-      · simp only [hpt, if_false] at hle ⊢
+      · simp only [hpt, ite_false] at hle ⊢
         omega
 
 /-- **Per-index query bound.** If `oa` respects a per-index budget `qb`, then for every oracle index
@@ -645,7 +643,7 @@ theorem transcript_countQ_le_of_isPerIndexQueryBound (h : OracleHandler spec) [D
       · rw [Function.update_self] at hle
         split_ifs <;> omega
       · rw [Function.update_of_ne htt.symm] at hle
-        simp only [if_neg htt]; omega
+        simp only [ite_eq_right htt]; omega
 
 end QueryBound
 

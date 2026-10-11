@@ -14,14 +14,14 @@ public import VCVio.ProgramLogic.Unary.HoareTriple
 
 @[expose] public section
 
-open ENNReal
+open ENNReal MeasureTheory
 
 universe u
 
 namespace OracleComp.ProgramLogic
 
 variable {ι : Type u} {spec : OracleSpec ι}
-variable [IsUniformSpec spec]
+variable [OracleSpec.AnswerMeasure spec]
 variable {α β : Type}
 
 example (x : α) (post : α → ℝ≥0∞) :
@@ -37,7 +37,7 @@ example (pre : ℝ≥0∞) (oa : OracleComp spec α) (ob : α → OracleComp spe
 
 example (t : spec.Domain) (post : spec.Range t → ℝ≥0∞) :
     wp (query t : OracleComp spec (spec.Range t)) post =
-      ∑' u : spec.Range t, (1 / Fintype.card (spec.Range t) : ℝ≥0∞) * post u :=
+      ∫⁻ u, post u ∂OracleSpec.AnswerMeasure.toMeasure t :=
   wp_query (spec := spec) t post
 
 end OracleComp.ProgramLogic

@@ -34,14 +34,27 @@ zero-knowledge proof more efficient while keeping zero knowledge by implementing
   correctness/soundness notions.
 - `KilianTransformation`: the succinct interactive argument built from a `PCP` and a
   `BatchOpeningVectorCommitment`.
-- `KilianTransformation_perfectlyComplete`: perfect completeness, from PCP completeness and
-  commitment correctness.
-- `KilianTransformation_sound`: statistical soundness with the PCP's soundness error, from perfect
-  batch position binding — a straight-line argument in which the commitment itself pins down the
-  effective proof string (`BatchOpeningVectorCommitment.committedValue`), with no extractor.
+- `KilianTransformation_perfectlyComplete`: perfect completeness, from PCP completeness for a coin
+  sampler with full support and commitment correctness.
+- `KilianTransformation_sound`: statistical soundness with the PCP's soundness error, for the
+  verifier that draws its challenge with the PCP's coin sampler, from perfect batch position
+  binding — a straight-line argument in which the commitment itself pins down the effective proof
+  string (`BatchOpeningVectorCommitment.committedValue`), with no extractor.
+- `KilianTransformation_perfectlyComplete_probComp`, `KilianTransformation_sound_probComp`: the
+  same statements at `m := ProbComp`, where the hypotheses relating the `ProbComp` lift to the
+  ambient monad hold by definition and the commitment's operations never fail.
 
 Knowledge soundness (extraction) and the computational refinement of soundness — where binding may
 fail on a negligible-probability event, as for hash-based Merkle commitments — are future work.
+
+## Probability assumptions
+
+The transformation is generic in the monad `m` of the vector commitment, following the conventions
+of `VCVio.CryptoFoundations.SigmaProtocol`. The probability-bearing statements use the measure
+semantics `[EvalDistSemantics m]`, and their proofs add `[LawfulEvalDistSemantics m]`; the
+possible outputs of the honest parties are given by `[MonadAttach m]`. The PCP itself lives in
+`ProbComp` and is pulled into `m` by `MonadLiftT ProbComp m`; the theorems ask for this lift to
+preserve distributions (`hfaithful`) and, for completeness, not to enlarge supports (`hlift`).
 -/
 
 @[expose] public section
@@ -191,7 +204,9 @@ over the PCP's symbol alphabet (e.g. the inductive Merkle tree of
 
 1. the prover commits to its PCP proof string with `bovc.commit`, retaining the proof string
    alongside the opener state as its private state (`commit`);
-2. the verifier sends random coins (`sampleChal := pcp.sampleCoins`);
+2. the verifier sends random coins, drawn by `pcp.sampleCoins` (the protocol record itself carries
+   no challenge sampler: completeness holds on every challenge, and `KilianTransformation_sound`
+   measures soundness against the lifted coin sampler `liftM pcp.sampleCoins`);
 3. the prover simulates `pcp.Verifier stmt coins` against its retained proof to learn exactly which
    positions the verifier reads, and opens *exactly* that set in one shot with `bovc.openBatch`,
    returning the claimed `(position, value)` pairs alongside the batch opening (`respond`);
@@ -236,7 +251,6 @@ noncomputable def KilianTransformation
     let proof ← pcp.Prover stmt wit
     let cs ← bovc.commit proof.get
     return (cs.1, (cs.2, proof.get))
-  sampleChal := liftM pcp.sampleCoins
   respond stmt _wit st coins := do
     -- Simulate the verifier against the retained proof, logging the positions it reads.
     let queried : List (Fin pcp.length) :=
@@ -375,126 +389,110 @@ theorem runVerifier_eq_evalWithAnswerFn
 
 /-- Ordinary PCP completeness (`pcp.perfectCorrectness`) delivers the acceptance condition consumed
 by `KilianTransformation_perfectlyComplete`, namely that every proof the honest prover can produce
-in `m` passes the PCP verifier on every challenge it can sample in `m`.
+in `m` passes the PCP verifier on every coin set the PCP's coin sampler can return.
 
-Two side conditions bridge the gap between PCP completeness (stated over `ProbComp`) and the ambient
-monad `m`:
-
-* `hrel` — the protocol's boolean relation refines the PCP relation, so a valid protocol instance
-  is a valid PCP instance;
-* `hlift` — lifting a `ProbComp` into `m` does not enlarge its support. This is the coherence of
-  the public-randomness lift; it cannot be derived from the bare `MonadLiftT ProbComp m` (the lift
-  could *a priori* interpret sampling differently from `ProbComp`), so it is required explicitly.
-  It holds by `rfl` for `m := ProbComp` and for any faithful lift. -/
+One side condition bridges the gap between PCP completeness (stated over `ProbComp`) and the
+ambient monad `m`: `hlift` — lifting a `ProbComp` into `m` does not enlarge its support. This is
+the coherence of the public-randomness lift; it cannot be derived from the bare
+`MonadLiftT ProbComp m` (the lift could *a priori* interpret sampling differently from `ProbComp`),
+so it is required explicitly. It holds by `rfl` for `m := ProbComp` and for any faithful lift. -/
 theorem perfectCorrectness_accepts_liftedProver
     (pcp : PCP Stmt Wit)
-    {m : Type → Type} [Monad m] [MonadLiftT ProbComp m]
-    [MonadLiftT m SPMF] [LawfulMonadLiftT m SPMF]
-    [MonadLiftT m SetM] [LawfulMonadLiftT m SetM] [EvalDistCompatible m]
+    {m : Type → Type} [MonadLiftT ProbComp m] [MonadAttach m]
     (rel : Stmt → Wit → Bool)
     (hlift : ∀ {β : Type} (mx : ProbComp β), support (liftM mx : m β) ⊆ support mx)
     (hpcp : pcp.perfectCorrectness rel) :
     ∀ x w, rel x w →
       ∀ proof ∈ support (liftM (pcp.Prover x w) : m (List.Vector pcp.Symbol pcp.length)),
-      ∀ coins ∈ support (liftM pcp.sampleCoins : m pcp.Coins),
+      ∀ coins ∈ support pcp.sampleCoins,
         pcp.runVerifier x coins proof = true := by
   intro x w hxw proof hproof coins hcoins
   unfold PCP.perfectCorrectness PCP.correctness at hpcp
   have hpr := hpcp x w hxw
   simp only [ENNReal.coe_zero, tsub_zero, ge_iff_le] at hpr
-  have h1 := le_antisymm prEvent_le_one hpr
-  rw [probEvent_eq_one_iff] at h1
-  refine h1.2 _ ?_
+  have h1 := le_antisymm (prEvent_le_one _) hpr
+  rw [prEvent_eq_one_iff] at h1
+  refine h1 _ ?_
   rw [mem_support_bind_iff]
   refine ⟨proof, hlift _ hproof, ?_⟩
   rw [mem_support_bind_iff]
-  exact ⟨coins, hlift _ hcoins, by rw [support_pure]; rfl⟩
-
-/-- Perfect PCP completeness already forces the honest prover and coin sampler never to fail: any
-positive failure probability inside `do proof ← Prover; coins ← sampleCoins; …` would pull the
-acceptance probability below one. So the never-failing of these honest `ProbComp` computations is
-*derived* from `pcp.perfectCorrectness`, never assumed — there is no need to take it as a separate
-hypothesis. -/
-theorem neverFail_of_perfectCorrectness
-    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool)
-    (hpcp : pcp.perfectCorrectness rel) {x : Stmt} {w : Wit} (hxw : rel x w) :
-    NeverFail (pcp.Prover x w) ∧ NeverFail pcp.sampleCoins := by
-  unfold PCP.perfectCorrectness PCP.correctness at hpcp
-  have hpr := hpcp x w hxw
-  simp only [ENNReal.coe_zero, tsub_zero, ge_iff_le] at hpr
-  have h1 := le_antisymm prEvent_le_one hpr
-  rw [probEvent_eq_one_iff] at h1
-  obtain ⟨hProverF, hRest⟩ := (probFailure_bind_eq_zero_iff _ _).mp h1.1
-  refine ⟨⟨hProverF⟩, ?_⟩
-  have hne : (support (pcp.Prover x w)).Nonempty := by
-    rw [Set.nonempty_iff_ne_empty, ne_eq, ← probFailure_eq_one_iff, hProverF]
-    exact zero_ne_one
-  obtain ⟨proof, hproof⟩ := hne
-  exact ⟨((probFailure_bind_eq_zero_iff _ _).mp (hRest proof hproof)).1⟩
+  exact ⟨coins, hcoins, by rw [support_pure]; rfl⟩
 
 /-- **Perfect completeness of the Kilian transformation.** If the underlying batch-opening vector
-commitment is complete (perfectly correct), and the PCP
-is complete (its honest prover's proof is accepted on every sampled coin set), then the resulting
-interactive argument is perfectly complete: the honest prover always convinces the verifier.
+commitment is complete (perfectly correct), and the PCP is complete with a coin sampler that can
+return every coin set, then the resulting interactive argument is perfectly complete: the honest
+prover convinces the verifier on every challenge.
 
 The hypotheses isolate the moving parts:
 
 * `hbovc` — the batch-opening vector commitment is complete: an honest commitment opens its
   committed claims to a batch opening that verifies;
-* `hpcp` — the PCP is complete (`pcp.perfectCorrectness`); together with `hfaithful` (lifting
-  `ProbComp` into `m` preserves the distribution) this gives, via
-  `perfectCorrectness_accepts_liftedProver`, that the honest proof is accepted on every sampled coin
-  set, and (via `neverFail_of_perfectCorrectness`) that the honest prover and sampler never fail;
+* `hpcp` — the PCP is complete (`pcp.perfectCorrectness`); together with `hlift` (lifting
+  `ProbComp` into `m` does not enlarge supports) this gives, via
+  `perfectCorrectness_accepts_liftedProver`, that the honest proof is accepted on every coin set
+  the sampler can return;
+* `hfull` — the PCP's coin sampler can return every coin set. `PerfectlyComplete` asks for
+  acceptance on every challenge, while PCP completeness only speaks about the coins the sampler
+  draws, so the two meet only when the sampler has full support;
+* `hfaithful` — lifting `ProbComp` into `m` preserves the distribution, so the lifted honest prover
+  never fails, as no `ProbComp` computation does;
 * `hCommit` / `hOpen` — the commitment's own operations never fail. These are genuinely independent:
   perfect correctness of `bovc` is vacuous if `openBatch` always fails, so it cannot supply them.
 
 The deterministic content lives in `KilianTransformation_verify_eq_true`; here we lift it across the
-probabilistic structure, showing the transcript distribution is supported entirely on `true`. -/
+probabilistic structure, showing that the honest transcript is lossless and that every output it
+can produce is accepted. At `m := ProbComp` the lift hypotheses hold by definition and no
+computation fails; see `KilianTransformation_perfectlyComplete_probComp`. -/
 theorem KilianTransformation_perfectlyComplete
     (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol]
     {m : Type → Type} [Monad m] [LawfulMonad m] [MonadLiftT ProbComp m]
-    [MonadLiftT m SPMF] [LawfulMonadLiftT m SPMF]
-    [MonadLiftT m SetM] [LawfulMonadLiftT m SetM] [EvalDistCompatible m]
+    [EvalDistSemantics m] [LawfulEvalDistSemantics m] [MonadAttach m] [WeaklyLawfulMonadAttach m]
     {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment m (Fin pcp.length) pcp.Symbol Commit State BatchOpening)
     (hbovc : bovc.PerfectlyCorrect)
     (hpcp : pcp.perfectCorrectness rel)
-    (hfaithful : ∀ {β : Type} (mx : ProbComp β), 𝒟[(liftM mx : m β)] = 𝒟[mx])
-    (hCommit : ∀ data, NeverFail (bovc.commit data))
-    (hOpen : ∀ st is, NeverFail (bovc.openBatch st is)) :
+    (hfull : ∀ coins, coins ∈ support pcp.sampleCoins)
+    (hlift : ∀ {β : Type} (mx : ProbComp β), support (liftM mx : m β) ⊆ support mx)
+    (hfaithful : ∀ {β : Type} (mx : ProbComp β), (liftM mx : m β) =ᵈ mx)
+    (hCommit : ∀ data, prFail (bovc.commit data) = 0)
+    (hOpen : ∀ st is, prFail (bovc.openBatch st is) = 0) :
     (KilianTransformation pcp bovc rel).PerfectlyComplete := by
-  have hlift : ∀ {β : Type} (mx : ProbComp β), support (liftM mx : m β) ⊆ support mx := by
-    intro β mx z hz
-    rw [mem_support_iff_evalDist_apply_ne_zero] at hz ⊢
-    rwa [hfaithful mx] at hz
-  have transport : ∀ {β : Type} (mx : ProbComp β), NeverFail mx → NeverFail (liftM mx : m β) := by
-    intro β mx h
-    rw [neverFail_iff]
-    unfold prFail
-    rw [hfaithful mx]
-    exact (neverFail_iff _).mp h
   have hAccept := perfectCorrectness_accepts_liftedProver pcp rel hlift hpcp
-  intro x w hxw
-  rw [probOutput_eq_one_iff_forall]
-  refine ⟨?_, ?_⟩
-  · -- The honest transcript never fails: prover/sampler by completeness, the rest by hCommit/hOpen.
-    obtain ⟨hProver0, hSample0⟩ := neverFail_of_perfectCorrectness pcp rel hpcp hxw
-    have hProver := transport _ hProver0
-    have hSample := transport _ hSample0
-    rw [← neverFail_iff]
-    simp only [KilianTransformation, neverFail_bind_iff, hProver, hSample, hCommit, hOpen,
-      NeverFail.instPure, implies_true, and_self]
-  · -- Every honest transcript makes the verifier accept.
-    intro y hy
-    simp only [KilianTransformation, mem_support_bind_iff, support_pure,
-      Set.mem_singleton_iff] at hy
-    obtain ⟨pcsc, ⟨proof, hproof, cs, hcommit, rfl⟩, coins, hcoins, _, ⟨op, hop, rfl⟩,
-      rfl⟩ := hy
-    refine KilianTransformation_verify_eq_true pcp bovc rel x cs.1 proof.get coins op _
-      (List.subset_dedup _) ?_ ?_
-    · exact hbovc proof.get _ cs.1 cs.2 hcommit op hop
-    · rw [← runVerifier_eq_evalWithAnswerFn]
-      exact hAccept x w hxw proof hproof coins hcoins
+  intro x w hxw coins
+  rw [← prEvent_eq_evalDist_singleton]
+  refine le_antisymm (prEvent_le_one _) ?_
+  simp only [KilianTransformation, bind_assoc, pure_bind]
+  -- Each draw of the honest transcript is lossless, and each of its possible outputs leads on.
+  refine le_prEvent_bind_of_forall_le_of_support _
+    (((hfaithful _).prEvent_eq _).trans (OracleComp.prEvent_true_eq_one _)) _ _
+    fun proof hproof => ?_
+  refine le_prEvent_bind_of_forall_le_of_support _ ((prFail_eq_zero_iff _).mp (hCommit _)) _ _
+    fun cs hcs => ?_
+  refine le_prEvent_bind_of_forall_le_of_support _ ((prFail_eq_zero_iff _).mp (hOpen _ _)) _ _
+    fun op hop => ?_
+  -- The verifier accepts every honest transcript.
+  rw [prEvent_pure, ite_eq_left]
+  refine KilianTransformation_verify_eq_true pcp bovc rel x cs.1 proof.get coins op _
+    (List.subset_dedup _) ?_ ?_
+  · exact hbovc proof.get _ cs.1 cs.2 hcs op hop
+  · rw [← runVerifier_eq_evalWithAnswerFn]
+    exact hAccept x w hxw proof hproof coins (hfull coins)
+
+/-- **Perfect completeness of the Kilian transformation over `ProbComp`.** With the commitment in
+`ProbComp`, the lift of the PCP's computations is the identity and no computation fails, so
+`KilianTransformation_perfectlyComplete` needs only commitment correctness, PCP completeness, and
+a coin sampler with full support. -/
+theorem KilianTransformation_perfectlyComplete_probComp
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol]
+    {Commit State BatchOpening : Type}
+    (bovc : BatchOpeningVectorCommitment ProbComp (Fin pcp.length) pcp.Symbol Commit State
+      BatchOpening)
+    (hbovc : bovc.PerfectlyCorrect)
+    (hpcp : pcp.perfectCorrectness rel)
+    (hfull : ∀ coins, coins ∈ support pcp.sampleCoins) :
+    (KilianTransformation pcp bovc rel).PerfectlyComplete :=
+  KilianTransformation_perfectlyComplete pcp rel bovc hbovc hpcp hfull (fun _ => subset_rfl)
+    (fun _ => EvalDistEq.rfl) (fun _ => prFail_eq_zero _) (fun _ _ => prFail_eq_zero _)
 
 end Completeness
 
@@ -536,7 +534,8 @@ theorem runVerifier_committedValue_of_KilianTransformation_verify
 /-- **Statistical soundness of the Kilian transformation** under perfect position binding. If the
 batch-opening vector commitment is (perfectly, information-theoretically) batch position binding
 and the PCP is sound with error `ε`, the resulting interactive argument is sound with the same
-error `ε`, against arbitrary — even computationally unbounded and adaptive — provers.
+error `ε` for the verifier that draws its challenge with the PCP's coin sampler, lifted into `m`,
+against arbitrary — even computationally unbounded and adaptive — provers.
 
 The argument is the classical one, made straight-line by perfect binding: a cheating prover's
 commitment `pc` pins down a single proof string `bovc.committedValue pc` (no extractor or
@@ -548,37 +547,43 @@ For a commitment that is only *computationally* binding (a hash-based Merkle tre
 perfect-binding statement is the information-theoretic core; the computational statement — where
 `BatchPositionBinding` may fail on a negligible-probability event — is future work, as is
 knowledge soundness. `hfaithful` is the same distribution-faithfulness of the `ProbComp` lift
-required by `KilianTransformation_perfectlyComplete`. -/
+required by `KilianTransformation_perfectlyComplete`; at `m := ProbComp` it holds by definition
+(`KilianTransformation_sound_probComp`). -/
 theorem KilianTransformation_sound
     (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol] [Inhabited pcp.Symbol]
-    {m : Type → Type} [Monad m] [MonadLiftT ProbComp m]
-    [MonadLiftT m SPMF] [LawfulMonadLiftT m SPMF]
-    [MonadLiftT m SetM] [LawfulMonadLiftT m SetM] [EvalDistCompatible m]
+    {m : Type → Type} [Monad m] [MonadLiftT ProbComp m] [EvalDistSemantics m]
     {Commit State BatchOpening : Type}
     (bovc : BatchOpeningVectorCommitment m (Fin pcp.length) pcp.Symbol Commit State BatchOpening)
     (hbind : bovc.BatchPositionBinding)
     {ε : ℝ≥0} (hpcp : pcp.soundness rel ε)
-    (hfaithful : ∀ {β : Type} (mx : ProbComp β), 𝒟[(liftM mx : m β)] = 𝒟[mx]) :
-    (KilianTransformation pcp bovc rel).Sound ε := by
+    (hfaithful : ∀ {β : Type} (mx : ProbComp β), (liftM mx : m β) =ᵈ mx) :
+    (KilianTransformation pcp bovc rel).Sound (liftM pcp.sampleCoins) ε := by
   intro x hx pc
   set proofStr := List.Vector.ofFn (bovc.committedValue pc) with hproofStr
-  -- Move the probability from the protocol's lifted challenge sampler to its `ProbComp` source.
-  have hswap : ∀ p : pcp.Coins → Prop,
-      Pr{let x ← (liftM pcp.sampleCoins : m pcp.Coins)}[p x] = Pr{let x ← pcp.sampleCoins}[p x] := fun p => by
-    unfold probEvent
-    rw [hfaithful pcp.sampleCoins]
-  have hchal : (KilianTransformation pcp bovc rel).sampleChal
-      = (liftM pcp.sampleCoins : m pcp.Coins) := rfl
-  rw [hchal, hswap]
+  -- Move the probability from the lifted challenge sampler to its `ProbComp` source.
+  rw [(hfaithful pcp.sampleCoins).prEvent_eq]
   -- PCP soundness at the committed proof string, in event-over-coins form.
   have hfinal : Pr{let coins ← pcp.sampleCoins}[pcp.runVerifier x coins proofStr = true]
       ≤ (ε : ℝ≥0∞) := by
     have h := hpcp x hx proofStr
     simp only [bind_pure_comp, prEvent_map] at h
     exact h
-  refine (prEvent_mono fun coins _ hcoins => ?_).trans hfinal
+  refine (prEvent_mono _ _ _ fun coins hcoins => ?_).trans hfinal
   obtain ⟨resp, hresp⟩ := hcoins
   exact runVerifier_committedValue_of_KilianTransformation_verify
     pcp rel bovc hbind x pc coins resp hresp
+
+/-- **Statistical soundness of the Kilian transformation over `ProbComp`.** With the commitment in
+`ProbComp`, the verifier draws its challenge with the PCP's coin sampler itself, and
+`KilianTransformation_sound` needs only perfect batch position binding and PCP soundness. -/
+theorem KilianTransformation_sound_probComp
+    (pcp : PCP Stmt Wit) (rel : Stmt → Wit → Bool) [BEq pcp.Symbol] [Inhabited pcp.Symbol]
+    {Commit State BatchOpening : Type}
+    (bovc : BatchOpeningVectorCommitment ProbComp (Fin pcp.length) pcp.Symbol Commit State
+      BatchOpening)
+    (hbind : bovc.BatchPositionBinding)
+    {ε : ℝ≥0} (hpcp : pcp.soundness rel ε) :
+    (KilianTransformation pcp bovc rel).Sound pcp.sampleCoins ε :=
+  KilianTransformation_sound pcp rel bovc hbind hpcp fun _ => EvalDistEq.rfl
 
 end Soundness

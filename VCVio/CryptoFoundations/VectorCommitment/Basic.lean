@@ -5,7 +5,7 @@ Authors: Bolton Bailey
 -/
 module
 
-public import VCVio.EvalDist.MeasureTVDist.Basic
+public import VCVio.EvalDist.Defs.Support
 
 /-!
 # Vector Commitments
@@ -17,9 +17,9 @@ short `Opening` that the verifier can check against the commitment alone.
 
 This is the intermediate layer that sits between a concrete construction — such as the inductive
 Merkle tree in `VCVio.CryptoFoundations.MerkleTree.Inductive.Defs` (whose vector-commitment
-instance is in `VCVio.CryptoFoundations.MerkleTree.Inductive.VectorCommitment`) — and consumers that
+instance is in `VCVio.CryptoFoundations.VectorCommitment.MerkleTree`) — and consumers that
 only need the positional commit/open/verify interface, such as the Kilian transformation
-(`VCVio.CryptoFoundations.Kilian`).
+(`VCVio.CryptoFoundations.ChallengeVerifyProtocol.Kilian`).
 
 ## Type Parameters
 
@@ -43,11 +43,13 @@ We also provide `BatchOpeningVectorCommitment`, a variant whose opening and veri
 batch scheme (e.g. one sharing authentication-path hashes across positions) can be more succinct
 than the round-trip through single openings, so the conversions are bridges, not isomorphisms.
 
-## Probability assumptions
+## Possible outputs
 
-As with `ChallengeVerifyProtocol`, probability reasoning is expressed through the standard
-`MonadLiftT m SetM` lift introduced in the `EvalDist` layer, so `support` is available for the
-monadic `commit` / `openAt` fields.
+The correctness properties quantify over the possible outputs of the monadic `commit` / `openAt`
+fields, so they ask for `[MonadAttach m]`, which provides `support`. Lemmas that decompose the
+possible outputs of a composite computation add `[LawfulMonadAttach m]`, under which a possible
+output of a bind comes from possible outputs of its two halves. No probability semantics is
+needed: binding is a property of the deterministic verifier.
 -/
 
 @[expose] public section
@@ -75,13 +77,11 @@ structure VectorCommitment
 
 namespace VectorCommitment
 
-variable {m : Type → Type} [Monad m]
-  [MonadLiftT m SetM] [LawfulMonadLiftT m SetM]
-  {ι α Commit State Opening : Type}
+variable {m : Type → Type} {ι α Commit State Opening : Type}
 
 /-- A vector commitment is **perfectly correct** if, for every vector and position, any honestly
 produced commitment/state opens at that position to the committed value and passes verification. -/
-def PerfectlyCorrect (vc : VectorCommitment m ι α Commit State Opening) : Prop :=
+def PerfectlyCorrect [MonadAttach m] (vc : VectorCommitment m ι α Commit State Opening) : Prop :=
   ∀ (data : ι → α) (i : ι) (c : Commit) (st : State),
     (c, st) ∈ support (vc.commit data) →
       ∀ op ∈ support (vc.openAt st i), vc.verifyOpen c i (data i) op = true
@@ -149,7 +149,7 @@ def toVectorCommitment (bovc : BatchOpeningVectorCommitment m ι α Commit State
 
 section Security
 
-variable [Monad m] [MonadLiftT m SetM] [LawfulMonadLiftT m SetM]
+variable [MonadAttach m]
 
 /-- A batch-opening vector commitment is **perfectly correct** if, for every vector and every list
 of positions, any honestly produced commitment/state opens that list to a batch opening that
@@ -220,7 +220,7 @@ theorem BatchPositionBinding.committedValue_eq [Inhabited α]
   have hex : ∃ v' : α, ∃ claims' : List (ι × α), ∃ op' : BatchOpening,
       (i, v') ∈ claims' ∧ bovc.verifyBatch c claims' op' = true := ⟨v, claims, op, hmem, hver⟩
   unfold committedValue
-  rw [dif_pos hex]
+  rw [dite_eq_left hex]
   obtain ⟨claims', op', hmem', hver'⟩ := hex.choose_spec
   exact hbind c claims' claims op' op i _ v hver' hver hmem' hmem
 
@@ -230,8 +230,7 @@ end BatchOpeningVectorCommitment
 
 namespace VectorCommitment
 
-variable {m : Type → Type} [Monad m] [LawfulMonad m]
-  [MonadLiftT m SetM] [LawfulMonadLiftT m SetM]
+variable {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
   {ι α Commit State Opening : Type}
 
 /-- `toBatchOpening` preserves perfect correctness: an honest batch opening is the list of the
@@ -252,14 +251,17 @@ theorem PerfectlyCorrect.toBatchOpening [DecidableEq ι]
     induction is with
     | nil =>
       intro op hop
-      simp only [List.mapM_nil, support_pure, Set.mem_singleton_iff] at hop
-      subst hop
+      rw [List.mapM_nil] at hop
+      obtain rfl := LawfulMonadAttach.eq_of_canReturn_pure hop
       exact ⟨rfl, by simp⟩
     | cons a as ih =>
       intro op hop
-      simp only [List.mapM_cons, mem_support_bind_iff, support_pure,
-        Set.mem_singleton_iff] at hop
-      obtain ⟨x, ⟨o, ho, rfl⟩, xs, hxs, rfl⟩ := hop
+      rw [List.mapM_cons] at hop
+      obtain ⟨x, hx, hop⟩ := LawfulMonadAttach.canReturn_bind_imp' hop
+      obtain ⟨o, ho, hx⟩ := LawfulMonadAttach.canReturn_bind_imp' hx
+      obtain rfl := LawfulMonadAttach.eq_of_canReturn_pure hx
+      obtain ⟨xs, hxs, hop⟩ := LawfulMonadAttach.canReturn_bind_imp' hop
+      obtain rfl := LawfulMonadAttach.eq_of_canReturn_pure hop
       obtain ⟨hkeys, hentries⟩ := ih xs hxs
       refine ⟨by simp [hkeys], fun entry hentry => ?_⟩
       rcases List.mem_cons.1 hentry with rfl | hentry

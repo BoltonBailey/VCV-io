@@ -116,15 +116,13 @@ theorem get_leafDataOfFn : ∀ {s : Skeleton} (f : SkeletonLeafIndex s → α)
 an honestly built tree verifies the committed value against the committed root. The opening's
 authentication path is `generateProof`, and the check reduces to
 `InductiveMerkleTree.functional_completeness`. -/
-theorem vectorCommitment_perfectlyCorrect {ι : Type} {m : Type → Type} [Monad m]
-    [MonadLiftT m SetM] [LawfulMonadLiftT m SetM] [DecidableEq α]
+theorem vectorCommitment_perfectlyCorrect {ι : Type} {m : Type → Type} [Monad m] [LawfulMonad m]
+    [MonadAttach m] [LawfulMonadAttach m] [DecidableEq α]
     (s : Skeleton) (e : ι ≃ SkeletonLeafIndex s) (hashFn : α → α → α) :
     (vectorCommitment (m := m) s e hashFn).PerfectlyCorrect := by
   intro data i c st hcst op hop
-  simp only [vectorCommitment, support_pure, Set.mem_singleton_iff, Prod.mk.injEq] at hcst
-  obtain ⟨rfl, rfl⟩ := hcst
-  simp only [vectorCommitment, support_pure, Set.mem_singleton_iff] at hop
-  subst hop
+  obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcst).symm
+  obtain rfl := LawfulMonadAttach.eq_of_canReturn_pure hop
   simp only [vectorCommitment, List.Vector.toList_length, dite_true,
     decide_eq_true_eq, vector_mk_toList]
   simpa [get_leafDataOfFn] using
@@ -150,7 +148,7 @@ theorem vectorCommitment_commit {ι : Type} {m : Type → Type} [Monad m] [Decid
 single-position correctness, since `VectorCommitment.toBatchOpening` preserves it
 (`VectorCommitment.PerfectlyCorrect.toBatchOpening`). -/
 theorem naiveBatchOpenMerkleTree_perfectlyCorrect {ι : Type} {m : Type → Type}
-    [Monad m] [LawfulMonad m] [MonadLiftT m SetM] [LawfulMonadLiftT m SetM]
+    [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
     [DecidableEq α] [DecidableEq ι]
     (s : Skeleton) (e : ι ≃ SkeletonLeafIndex s) (hashFn : α → α → α) :
     (naiveBatchOpenMerkleTree (m := m) s e hashFn).PerfectlyCorrect :=

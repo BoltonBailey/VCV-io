@@ -1171,7 +1171,6 @@ the search over a non-empty challenge list returns `some (ω, resp, _)` whose re
 (perfect completeness applied to the chosen transcript). The `none` branch never arises. -/
 private lemma fischlinUnifSearch_match_verify
     {Stmt Wit Commit PrvState Chal Resp : Type} {rel : Stmt → Wit → Bool} {b : ℕ}
-    [SampleableType Chal]
     (σ : SigmaProtocol Stmt Wit Commit PrvState Chal Resp rel ProbComp)
     (hc : σ.PerfectlyComplete) (pk : Stmt) (sk : Wit) (hrel : rel pk sk = true)
     (pc : Commit) (sc : PrvState) (hpc : (pc, sc) ∈ support (σ.commit pk sk))
